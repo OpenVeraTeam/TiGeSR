@@ -146,34 +146,36 @@ Annotations may be produced by the official [PaddleOCR / PP-OCRv5](https://githu
 
 ## Training
 
-The released Python entry points preserve the original training implementations: `train_stage1.py` differs from the author's script only in release-directory imports, while `train_stage2.py` is unchanged. The shell launchers reproduce the original continuation/fine-tuning recipes instead of using abbreviated example arguments:
-
-- **Stage 1:** pruned RoPE, `--is_shape_same`, 8 epochs, batch size 2, learning rate `5e-5`, `lambda_l2=1`, `lambda_focal=0.1`, `lambda_edge=1`, evaluation every 16,000 steps, and checkpoints every 32,000 steps.
-- **Stage 2:** VAE-containing checkpoint continuation, 50 epochs, batch size 1, learning rate `5e-6`, cosine scheduling with 200 warmup steps, `timestep=150`, `ctrl_layers=6`, `lambda_l2=1`, `lambda_lpips=1`, `lambda_edge=0`, and PSNR early stopping.
-
-Both recipes resume from checkpoints, as did the original training commands. Set the required path variables before launch:
+The launchers retain the original experiment hyperparameters. Replace only the `/path/to/...` entries in the corresponding script before launch:
 
 ```bash
-# Stage 1
-export STAGE1_BASE_CKPT=/path/to/DiffTSR_new.ckpt
-export STAGE1_IDM_CKPT=/path/to/stage1/model.pth
-export STAGE1_ENCODER_CKPT=/path/to/stage1/encoder.pth
-export STAGE1_TRAIN_FOLDERS=/path/to/train_a,/path/to/train_b
-export STAGE1_TEST_FOLDER=/path/to/val
+# Stage 1: pruned RoPE
 bash scripts/train_stage1.sh
 
-# Stage 2
-export STAGE2_CKPT_PATH=/path/to/stage2/model.pkl
-export STAGE2_TRAIN_FOLDER=/path/to/stage2/train
-export STAGE2_TEST_FOLDER=/path/to/stage2/val
+# Stage 1: unpruned RoPE
+bash scripts/train_stage1_unpruned.sh
+
+# Stage 2: RealCE
 bash scripts/train_stage2.sh
 ```
 
-Set `CUDA_VISIBLE_DEVICES` before either command to choose GPUs. The Stage-1 launcher defaults to `configs/realce_stage1.yaml`; override it for UZ-ST with `export STAGE1_CONFIG=configs/stage1.yaml`.
+| Recipe | Config | Epochs | Batch | Learning rate | Loss / sampling |
+| --- | --- | ---: | ---: | ---: | --- |
+| Stage 1, unpruned | `configs/stage1.yaml` | 4 | 2 | `5e-5` | `lambda_l2=1`, `lambda_focal=0.5` |
+| Stage 1, pruned | `configs/realce_stage1.yaml` | 8 | 2 | `5e-6` | `lambda_l2=1`, `lambda_focal=0.5` |
+| Stage 2, RealCE | - | 100 | 1 | `5e-6` (default) | `timestep=150`, `ctrl_layers=6`, `lambda_l2=1`, `lambda_lpips=5`, `lambda_edge=100` |
 
 Stage 1 accepts a comma-separated `--train_folders` list. Stage 2 expects paired data organized like the supplied Real-CE implementation: LR images in `13mm_aligned_1024/`, targets in `52mm_aligned_1024/`, and glyph masks in `mask_52mm_patchedx4/`. The released stage 1 and stage 2 checkpoints are trained on [UZ-ST](https://huggingface.co/datasets/mxluocv/UZ-ST); use its corresponding paired-folder layout and the matching dataset configuration from the original experiment setup.
 
 For stage-1 training, set `--config_yaml configs/stage1.yaml` for UZ-ST and `--config_yaml configs/realce_stage1.yaml` for RealCE. Stage 2 does not consume this stage-1 YAML; it uses the stage-1 output as glyph guidance.
+
+## Synthetic degradation
+
+`data/deg_mine.py` is the synthetic-data degradation used in our experiments. It applies the two-stage Real-ESRGAN-style blur/noise/JPEG degradation and writes bicubic-upsampled low-quality images to `lr_normal_blur_kernel/` under the dataset root:
+
+```bash
+python data/deg_mine.py --root_path /path/to/rendered_dataset
+```
 
 ## Evaluation
 

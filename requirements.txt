@@ -1,5 +1,6 @@
 # Install a CUDA-compatible PyTorch build first: https://pytorch.org/get-started/locally/
 accelerate>=1.0
+basicsr>=1.4.2
 diffusers>=0.31
 transformers>=4.45
 peft>=0.13
