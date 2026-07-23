@@ -39,6 +39,21 @@ weights/
 └── stable-diffusion-3.5-medium/
 ```
 
+### RealCE checkpoints
+
+The RealCE checkpoint package is distributed separately and is not tracked by Git. Copy it into `weights/realce/` using this layout:
+
+```text
+weights/realce/
+├── stage1/
+│   ├── encoder-96000.pth
+│   └── model-96000.pth
+└── stage2/
+    └── model_135200.pkl
+```
+
+For RealCE inference, pass `weights/realce/stage1/model-96000.pth` as `--idm_ckpt_path`, `weights/realce/stage1/encoder-96000.pth` as `--enc_path`, and `weights/realce/stage2/model_135200.pkl` as `--ctrlnet_ckpt_path`.
+
 ## End-to-end inference
 
 Run from the repository root. With no annotations, the pipeline runs PaddleOCR itself. With `--anno_path`, it consumes cached annotations named `<image-stem>_res.json`.
