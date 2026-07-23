@@ -23,7 +23,9 @@ Use Linux with an NVIDIA GPU. Create an environment with Python 3.11, install th
 pip install -r requirements.txt
 ```
 
-Download the Stable Diffusion 3.5 Medium files and place them at `weights/stable-diffusion-3.5-medium/`. Put TIGER checkpoints in `weights/`; they are excluded from git. Before publishing, add permanent model and dataset URLs to this README and confirm that the redistribution terms permit them.
+Download the Stable Diffusion 3.5 Medium files and place them at `weights/stable-diffusion-3.5-medium/`. Download the TIGER checkpoints from [Google Drive](https://drive.google.com/drive/folders/15EJ-1gXHF174wRA5Njwd84EqFkyqZKfx) and place them in `weights/`; they are excluded from git.
+
+The [UZ-ST dataset](https://huggingface.co/datasets/mxluocv/UZ-ST) is available on Hugging Face. Both TIGER stage 1 and stage 2 released checkpoints are trained on UZ-ST.
 
 ## Checkpoint layout
 
@@ -67,7 +69,7 @@ bash scripts/train_stage1.sh
 bash scripts/train_stage2.sh
 ```
 
-Stage 1 accepts a comma-separated `--train_folders` list. Stage 2 expects paired data organized like the supplied Real-CE implementation: LR images in `13mm_aligned_1024/`, targets in `52mm_aligned_1024/`, and glyph masks in `mask_52mm_patchedx4/`. For UZ-ST, provide the corresponding paired folders and use the matching dataset class/configuration from the original experiment setup.
+Stage 1 accepts a comma-separated `--train_folders` list. Stage 2 expects paired data organized like the supplied Real-CE implementation: LR images in `13mm_aligned_1024/`, targets in `52mm_aligned_1024/`, and glyph masks in `mask_52mm_patchedx4/`. The released stage 1 and stage 2 checkpoints are trained on [UZ-ST](https://huggingface.co/datasets/mxluocv/UZ-ST); use its corresponding paired-folder layout and the matching dataset configuration from the original experiment setup.
 
 ## Evaluation
 
@@ -85,8 +87,8 @@ python scripts/evaluate.py --pred-dir outputs/demo --gt-dir /path/to/gt --labels
 
 ## Release checklist
 
-- [ ] Publish verified checkpoint URLs and SHA-256 checksums.
-- [ ] Publish dataset download/preprocessing instructions and usage terms.
+- [ ] Publish SHA-256 checksums for each released checkpoint.
+- [ ] Add detailed UZ-ST preprocessing instructions and usage terms.
 - [ ] Add citation details, author/contact information, and a `NOTICE` file for all inherited third-party code.
 - [ ] Run one clean-environment training smoke test and one end-to-end inference/evaluation run.
 
