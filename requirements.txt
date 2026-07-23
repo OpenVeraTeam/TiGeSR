@@ -1,0 +1,19 @@
+# Install a CUDA-compatible PyTorch build first: https://pytorch.org/get-started/locally/
+accelerate>=1.0
+diffusers>=0.31
+transformers>=4.45
+peft>=0.13
+omegaconf>=2.3
+paddlepaddle-gpu>=3.0
+paddleocr>=3.0
+lpips>=0.1.4
+pyiqa>=0.1.13
+opencv-python-headless>=4.8
+scikit-image>=0.22
+einops
+kornia
+easydict
+numpy
+Pillow
+tqdm
+tensorboard
