@@ -1,4 +1,4 @@
-# TIGER: Restore Text First, Enhance Image Later
+# TiGeSR (TIGER): Restore Text First, Enhance Image Later
 
 Official implementation of **TIGER** (Text-Image Guided supEr-Resolution), the two-stage scene-text image super-resolution framework from CVPR 2026. TIGER first restores text glyph structure (stage 1), then uses the restored structure to guide full-image enhancement (stage 2).
 
