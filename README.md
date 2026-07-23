@@ -11,7 +11,7 @@ Paper: [CVPR Open Access](https://openaccess.thecvf.com/content/CVPR2026/html/Lu
 - `scripts/inference.py`: multi-GPU, end-to-end TIGER inference.
 - `scripts/make_ocr_annotations.py`: optional OCR annotation cache generation.
 - `scripts/evaluate.py`: PSNR, SSIM, LPIPS, and optional OCR accuracy (OCR-A).
-- `models/`, `data/`, `utils/`, and `configs/stage1.yaml`: only code required by the above entry points.
+- `models/`, `data/`, `utils/`, and `configs/`: only code required by the above entry points.
 
 Experiment outputs, raw datasets, checkpoints, obsolete ablations, font assets, and vendored PaddleOCR source are intentionally excluded.
 
@@ -54,6 +54,8 @@ hf download mxluocv/TiGeSR --include "realce/**" --local-dir weights
 
 For a given set, pass `stage1/model.pth` as `--idm_ckpt_path`, `stage1/encoder.pth` as `--enc_path`, and `stage2/model.pkl` as `--ctrlnet_ckpt_path`. Do not mix checkpoints between `uzst/` and `realce/`.
 
+**Important:** the RealCE stage-1 checkpoint is a pruned RoPE model and must use `configs/realce_stage1.yaml` (`RoPE2Out_mask_pruned_config_hybridwEncoder.yaml`). The UZ-ST stage-1 checkpoint uses `configs/stage1.yaml`.
+
 ## End-to-end inference
 
 Run from the repository root. With no annotations, the pipeline runs PaddleOCR itself. With `--anno_path`, it consumes cached annotations named `<image-stem>_res.json`.
@@ -66,6 +68,19 @@ python scripts/inference.py \
   --idm_ckpt_path weights/stage1_idm.pth \
   --enc_path weights/stage1_encoder.pth \
   --ctrlnet_ckpt_path weights/stage2_ctrlnet.pkl \
+  --timestep 150 --ctrl_layers 6 --enable_tiling
+```
+
+For the RealCE checkpoint set, use the matching pruned configuration and paths:
+
+```bash
+python scripts/inference.py \
+  --test_folder /path/to/realce/lr_images \
+  --output_dir outputs/realce \
+  --difftsr_config configs/realce_stage1.yaml \
+  --idm_ckpt_path weights/realce/stage1/model.pth \
+  --enc_path weights/realce/stage1/encoder.pth \
+  --ctrlnet_ckpt_path weights/realce/stage2/model.pkl \
   --timestep 150 --ctrl_layers 6 --enable_tiling
 ```
 
