@@ -4,6 +4,18 @@ Official implementation of **TIGER** (Text-Image Guided supEr-Resolution), the t
 
 Paper: [CVPR Open Access](https://openaccess.thecvf.com/content/CVPR2026/html/Luo_Restore_Text_First_Enhance_Image_Later_Two-Stage_Scene_Text_Image_CVPR_2026_paper.html) · [arXiv](https://arxiv.org/abs/2510.21590)
 
+<p align="center">
+  <img src="assets/teaser.png" alt="TiGeSR visual comparisons on real-world text images" width="100%">
+</p>
+
+## Overview
+
+TiGeSR uses text restoration to recover a reliable glyph prior before performing full-image super-resolution.
+
+<p align="center">
+  <img src="assets/pipeline.png" alt="The two-stage TiGeSR pipeline" width="100%">
+</p>
+
 ## What is included
 
 - `scripts/train_stage1.py`: glyph-restoration training.
