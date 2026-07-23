@@ -56,6 +56,11 @@ For a given set, pass `stage1/model.pth` as `--idm_ckpt_path`, `stage1/encoder.p
 
 **Important:** the RealCE stage-1 checkpoint is a pruned RoPE model and must use `configs/realce_stage1.yaml` (`RoPE2Out_mask_pruned_config_hybridwEncoder.yaml`). The UZ-ST stage-1 checkpoint uses `configs/stage1.yaml`.
 
+| Checkpoint set | Stage-1 config | Use it with |
+| --- | --- | --- |
+| UZ-ST | `configs/stage1.yaml` | `weights/uzst/` |
+| RealCE | `configs/realce_stage1.yaml` | `weights/realce/` |
+
 ## End-to-end inference
 
 Run from the repository root. With no annotations, the pipeline runs PaddleOCR itself. With `--anno_path`, it consumes cached annotations named `<image-stem>_res.json`.
@@ -90,6 +95,43 @@ To prepare reusable annotations:
 python scripts/make_ocr_annotations.py --input-dir /path/to/lr_images --output-dir /path/to/annotations
 ```
 
+## OCR annotations (optional)
+
+TIGER supports two equivalent OCR paths for full-pipeline inference:
+
+1. **Run PP-OCRv5 automatically.** Omit `--anno_path`; `scripts/inference.py` runs PaddleOCR internally for each input image.
+2. **Use cached or manually corrected annotations.** Generate annotations first, correct their recognition text or polygons if desired, then pass `--anno_path /path/to/annotations` to inference. This avoids repeated OCR and makes the text guidance reproducible.
+
+For cached annotations, the inference script expects one file per input image at `<annotation_dir>/<image-stem>_res.json`, for example `annotations/IMG_0001_res.json`. The compatible PP-OCRv5 JSON fields are:
+
+```json
+{
+  "doc_preprocessor_res": {"angle": 0},
+  "dt_polys": [[[x1, y1], [x2, y2], [x3, y3], [x4, y4]]],
+  "rec_texts": ["recognized text"],
+  "rec_scores": [0.99],
+  "textline_orientation_angles": [0]
+}
+```
+
+`dt_polys` coordinates must be expressed in pixels of the original input image. `rec_scores` and `textline_orientation_angles` are optional; TIGER substitutes confidence `1.0` and orientation `0` when they are absent. With `--enable_tiling`, TIGER scales the supplied polygons internally together with the image.
+
+Example with precomputed annotations:
+
+```bash
+python scripts/inference.py \
+  --test_folder /path/to/lr_images \
+  --anno_path /path/to/annotations \
+  --output_dir outputs/realce \
+  --difftsr_config configs/realce_stage1.yaml \
+  --idm_ckpt_path weights/realce/stage1/model.pth \
+  --enc_path weights/realce/stage1/encoder.pth \
+  --ctrlnet_ckpt_path weights/realce/stage2/model.pkl \
+  --timestep 150 --ctrl_layers 6 --enable_tiling
+```
+
+Annotations may be produced by the official [PaddleOCR / PP-OCRv5](https://github.com/PaddlePaddle/PaddleOCR) implementation or a PyTorch implementation such as [frotms/PaddleOCR2Pytorch](https://github.com/frotms/PaddleOCR2Pytorch), provided the saved JSON follows the schema above. The PyTorch implementation is an external dependency and is not bundled with TiGeSR.
+
 ## Training
 
 The launchers capture the paper settings (stage 1: 8 epochs, learning rate `5e-5`; stage 2: learning rate `5e-6`, `timestep=150`, `ctrl_layers=6`). Replace all `/path/to/...` placeholders before use:
@@ -100,6 +142,8 @@ bash scripts/train_stage2.sh
 ```
 
 Stage 1 accepts a comma-separated `--train_folders` list. Stage 2 expects paired data organized like the supplied Real-CE implementation: LR images in `13mm_aligned_1024/`, targets in `52mm_aligned_1024/`, and glyph masks in `mask_52mm_patchedx4/`. The released stage 1 and stage 2 checkpoints are trained on [UZ-ST](https://huggingface.co/datasets/mxluocv/UZ-ST); use its corresponding paired-folder layout and the matching dataset configuration from the original experiment setup.
+
+For stage-1 training, set `--config_yaml configs/stage1.yaml` for UZ-ST and `--config_yaml configs/realce_stage1.yaml` for RealCE. Stage 2 does not consume this stage-1 YAML; it uses the stage-1 output as glyph guidance.
 
 ## Evaluation
 
