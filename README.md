@@ -1,103 +1,116 @@
-# TiGeSR (TIGER): Restore Text First, Enhance Image Later
+<div align="center">
+
+# TiGeSR: Restore Text First, Enhance Image Later
+
+<img src="assets/tiger-mascot.png" alt="TIGER mascot" width="136" />
+
+**[CVPR 2026] Restore Text First, Enhance Image Later: Two-Stage Scene Text Image Super-Resolution with Glyph Structure Guidance**
+
+Minxing Luo<sup>1,2,*</sup> · Linlong Fan<sup>2,*</sup> · Qiushi Wang<sup>2,3</sup> · Ge Wu<sup>1</sup> · Yiyan Luo<sup>2</sup> · Yuhang Yu<sup>2</sup> · Jinwei Chen<sup>2</sup> · Yaxing Wang<sup>1,4</sup> · Qingnan Fan<sup>2,†</sup> · Jian Yang<sup>1,5,†</sup>
+
+<sup>1</sup> PCA Lab, VCIP, College of Computer Science, Nankai University · <sup>2</sup> vivo BlueImage Lab, vivo Mobile Communication Co., Ltd. · <sup>3</sup> SDS, CUHK, Shenzhen · <sup>4</sup> NKIARI, Shenzhen Futian · <sup>5</sup> PCA Lab, School of Intelligence Science and Technology, Nanjing University
+
+<a href="https://openaccess.thecvf.com/content/CVPR2026/html/Luo_Restore_Text_First_Enhance_Image_Later_Two-Stage_Scene_Text_Image_CVPR_2026_paper.html"><img src="https://img.shields.io/badge/Paper-CVPR%202026-b31b1b?style=flat-square" alt="CVPR paper" /></a>
+<a href="https://arxiv.org/abs/2510.21590"><img src="https://img.shields.io/badge/arXiv-2510.21590-b31b1b?style=flat-square" alt="arXiv" /></a>
+<a href="https://huggingface.co/mxluocv/TiGeSR"><img src="https://img.shields.io/badge/Models-Hugging%20Face-ff9d00?style=flat-square" alt="Models" /></a>
+<a href="https://huggingface.co/datasets/mxluocv/UZ-ST"><img src="https://img.shields.io/badge/Dataset-UZ--ST-ff9d00?style=flat-square" alt="UZ-ST" /></a>
+<a href="https://tony-lowe.github.io/TIGER_project_page/"><img src="https://img.shields.io/badge/Project-Page-267a54?style=flat-square" alt="Project page" /></a>
+
+</div>
+
+> **TIGER** (Text-Image Guided supEr-Resolution) first restores text glyph structure, then uses the restored glyph prior to guide full-image enhancement. It targets scene-text images where both character fidelity and natural scene detail matter.
 
 <p align="center">
-  <img src="assets/tiger-mascot.png" alt="TIGER mascot" width="150">
+  <img src="assets/teaser.png" alt="TiGeSR restores readable scene text while preserving image content" width="100%" />
 </p>
 
-Official implementation of **TIGER** (Text-Image Guided supEr-Resolution), the two-stage scene-text image super-resolution framework from CVPR 2026. TIGER first restores text glyph structure (stage 1), then uses the restored structure to guide full-image enhancement (stage 2).
+## News
 
-Paper: [CVPR Open Access](https://openaccess.thecvf.com/content/CVPR2026/html/Luo_Restore_Text_First_Enhance_Image_Later_Two-Stage_Scene_Text_Image_CVPR_2026_paper.html) · [arXiv](https://arxiv.org/abs/2510.21590)
-
-<p align="center">
-  <img src="assets/teaser.png" alt="TiGeSR visual comparisons on real-world text images" width="100%">
-</p>
+- **2026.07** — Code, inference, training, evaluation, UZ-ST alignment utilities, and model links are released.
+- **2026.06** — TiGeSR is accepted to CVPR 2026.
 
 ## Overview
 
-TiGeSR uses text restoration to recover a reliable glyph prior before performing full-image super-resolution.
-
 <p align="center">
-  <img src="assets/pipeline.png" alt="The two-stage TiGeSR pipeline" width="100%">
+  <img src="assets/pipeline.png" alt="The two-stage TiGeSR pipeline: glyph restoration followed by glyph-guided image enhancement" width="100%" />
 </p>
 
-## What is included
+The first stage reconstructs legible glyph structures from a low-quality scene image. The second stage conditions an image enhancer on both the input and the restored glyph mask, retaining realistic image content while protecting text readability.
 
-- `scripts/train_stage1.py`: glyph-restoration training.
-- `scripts/train_stage2.py`: SD3/ControlNet enhancement training.
-- `scripts/inference.py`: multi-GPU, end-to-end TIGER inference.
-- `scripts/make_ocr_annotations.py`: optional OCR annotation cache generation.
-- `scripts/evaluate.py`: PSNR, SSIM, LPIPS, and optional OCR accuracy (OCR-A).
-- `models/`, `data/`, `utils/`, and `configs/`: only code required by the above entry points.
+## Dependencies and installation
 
-Experiment outputs, raw datasets, checkpoints, obsolete ablations, font assets, and vendored PaddleOCR source are intentionally excluded.
-
-## Installation
-
-Use Linux with an NVIDIA GPU. Create an environment with Python 3.11, install the matching PyTorch/CUDA build from [pytorch.org](https://pytorch.org/get-started/locally/), then install the remaining dependencies:
+Tested on Linux with NVIDIA GPUs. Create a Python environment, install a PyTorch build compatible with your CUDA version from [pytorch.org](https://pytorch.org/get-started/locally/), then install the project dependencies:
 
 ```bash
+git clone git@github.com:OpenVeraTeam/TiGeSR.git
+cd TiGeSR
+
+conda create -n tiger python=3.11 -y
+conda activate tiger
 pip install -r requirements.txt
 ```
 
-Download the Stable Diffusion 3.5 Medium files and place them at `weights/stable-diffusion-3.5-medium/`. TIGER checkpoints are hosted in the [TiGeSR Hugging Face model repository](https://huggingface.co/mxluocv/TiGeSR) and are excluded from git.
+Download the Stable Diffusion 3.5 Medium files and place them in `weights/stable-diffusion-3.5-medium/`.
 
-The [UZ-ST dataset](https://huggingface.co/datasets/mxluocv/UZ-ST) is available on Hugging Face. The `uzst/` checkpoint set contains stage 1 and stage 2 models trained on UZ-ST; `realce/` contains the corresponding RealCE checkpoint set.
+## Pre-trained models
 
-## Checkpoint layout
+We provide two internally matched checkpoint sets in the [TiGeSR Hugging Face model repository](https://huggingface.co/mxluocv/TiGeSR):
 
-The full pipeline needs three learned checkpoints:
+- **UZ-ST**: stage 1 and stage 2 trained on [UZ-ST](https://huggingface.co/datasets/mxluocv/UZ-ST).
+- **RealCE**: stage 1 and stage 2 trained on RealCE; its stage-1 model is the pruned RoPE variant.
 
-```text
-weights/
-├── uzst/
-│   ├── stage1/{model.pth,encoder.pth}
-│   └── stage2/model.pkl
-├── realce/
-│   ├── stage1/{model.pth,encoder.pth}
-│   └── stage2/model.pkl
-└── stable-diffusion-3.5-medium/
-```
-
-Download one matching checkpoint set with the Hugging Face CLI:
+Download exactly one matching set. Do not mix stage-1 and stage-2 weights across sets.
 
 ```bash
 # UZ-ST-trained checkpoints
 hf download mxluocv/TiGeSR --include "uzst/**" --local-dir weights
 
-# RealCE checkpoints
+# RealCE-trained checkpoints
 hf download mxluocv/TiGeSR --include "realce/**" --local-dir weights
 ```
 
-For a given set, pass `stage1/model.pth` as `--idm_ckpt_path`, `stage1/encoder.pth` as `--enc_path`, and `stage2/model.pkl` as `--ctrlnet_ckpt_path`. Do not mix checkpoints between `uzst/` and `realce/`.
+The expected layout is:
 
-**Important:** the RealCE stage-1 checkpoint is a pruned RoPE model and must use `configs/realce_stage1.yaml` (`RoPE2Out_mask_pruned_config_hybridwEncoder.yaml`). The UZ-ST stage-1 checkpoint uses `configs/stage1.yaml`.
+```text
+weights/
+├── uzst/
+│   ├── stage1/
+│   │   ├── model.pth
+│   │   └── encoder.pth
+│   └── stage2/model.pkl
+├── realce/
+│   ├── stage1/
+│   │   ├── model.pth
+│   │   └── encoder.pth
+│   └── stage2/model.pkl
+└── stable-diffusion-3.5-medium/
+```
 
-| Checkpoint set | Stage-1 config | Use it with |
-| --- | --- | --- |
-| UZ-ST | `configs/stage1.yaml` | `weights/uzst/` |
-| RealCE | `configs/realce_stage1.yaml` | `weights/realce/` |
+Use `configs/stage1.yaml` with `weights/uzst/`. Use `configs/realce_stage1.yaml` with `weights/realce/`; this is the released pruned RoPE configuration (`RoPE2Out_mask_pruned_config_hybridwEncoder.yaml`).
 
-## End-to-end inference
+## ⚡ Inference
 
-Run from the repository root. With no annotations, the pipeline runs PaddleOCR itself. With `--anno_path`, it consumes cached annotations named `<image-stem>_res.json`.
+### Run the full TIGER pipeline
+
+Run from the repository root. Without `--anno_path`, TIGER runs PP-OCRv5 internally. The following UZ-ST command is the default example:
 
 ```bash
 python scripts/inference.py \
   --test_folder /path/to/lr_images \
-  --output_dir outputs/demo \
+  --output_dir outputs/uzst_demo \
   --difftsr_config configs/stage1.yaml \
-  --idm_ckpt_path weights/stage1_idm.pth \
-  --enc_path weights/stage1_encoder.pth \
-  --ctrlnet_ckpt_path weights/stage2_ctrlnet.pkl \
+  --idm_ckpt_path weights/uzst/stage1/model.pth \
+  --enc_path weights/uzst/stage1/encoder.pth \
+  --ctrlnet_ckpt_path weights/uzst/stage2/model.pkl \
   --timestep 150 --ctrl_layers 6 --enable_tiling
 ```
 
-For the RealCE checkpoint set, use the matching pruned configuration and paths:
+For RealCE, only switch to the matching checkpoint paths and pruned stage-1 config:
 
 ```bash
 python scripts/inference.py \
-  --test_folder /path/to/realce/lr_images \
-  --output_dir outputs/realce \
+  --test_folder /path/to/lr_images \
+  --output_dir outputs/realce_demo \
   --difftsr_config configs/realce_stage1.yaml \
   --idm_ckpt_path weights/realce/stage1/model.pth \
   --enc_path weights/realce/stage1/encoder.pth \
@@ -105,20 +118,17 @@ python scripts/inference.py \
   --timestep 150 --ctrl_layers 6 --enable_tiling
 ```
 
-To prepare reusable annotations:
+### Use your own PP-OCRv5 annotations
+
+Create reusable annotations from the integrated OCR path:
 
 ```bash
-python scripts/make_ocr_annotations.py --input-dir /path/to/lr_images --output-dir /path/to/annotations
+python scripts/make_ocr_annotations.py \
+  --input-dir /path/to/lr_images \
+  --output-dir /path/to/annotations
 ```
 
-## OCR annotations (optional)
-
-TIGER supports two equivalent OCR paths for full-pipeline inference:
-
-1. **Run PP-OCRv5 automatically.** Omit `--anno_path`; `scripts/inference.py` runs PaddleOCR internally for each input image.
-2. **Use cached or manually corrected annotations.** Generate annotations first, correct their recognition text or polygons if desired, then pass `--anno_path /path/to/annotations` to inference. This avoids repeated OCR and makes the text guidance reproducible.
-
-For cached annotations, the inference script expects one file per input image at `<annotation_dir>/<image-stem>_res.json`, for example `annotations/IMG_0001_res.json`. The compatible PP-OCRv5 JSON fields are:
+You may also supply manually corrected annotations or annotations produced by [PaddleOCR / PP-OCRv5](https://github.com/PaddlePaddle/PaddleOCR) or [PaddleOCR2Pytorch](https://github.com/frotms/PaddleOCR2Pytorch). Use one file per image at `<annotation_dir>/<image-stem>_res.json`, then add `--anno_path /path/to/annotations` to inference.
 
 ```json
 {
@@ -130,78 +140,75 @@ For cached annotations, the inference script expects one file per input image at
 }
 ```
 
-`dt_polys` coordinates must be expressed in pixels of the original input image. `rec_scores` and `textline_orientation_angles` are optional; TIGER substitutes confidence `1.0` and orientation `0` when they are absent. With `--enable_tiling`, TIGER scales the supplied polygons internally together with the image.
+`dt_polys` must be in pixels of the original input image. `rec_scores` and `textline_orientation_angles` are optional. TIGER supplies defaults of `1.0` and `0` when absent, and scales polygons internally when tiling is enabled.
 
-Example with precomputed annotations:
+## Train
 
-```bash
-python scripts/inference.py \
-  --test_folder /path/to/lr_images \
-  --anno_path /path/to/annotations \
-  --output_dir outputs/realce \
-  --difftsr_config configs/realce_stage1.yaml \
-  --idm_ckpt_path weights/realce/stage1/model.pth \
-  --enc_path weights/realce/stage1/encoder.pth \
-  --ctrlnet_ckpt_path weights/realce/stage2/model.pkl \
-  --timestep 150 --ctrl_layers 6 --enable_tiling
-```
-
-Annotations may be produced by the official [PaddleOCR / PP-OCRv5](https://github.com/PaddlePaddle/PaddleOCR) implementation or a PyTorch implementation such as [frotms/PaddleOCR2Pytorch](https://github.com/frotms/PaddleOCR2Pytorch), provided the saved JSON follows the schema above. The PyTorch implementation is an external dependency and is not bundled with TiGeSR.
-
-## Training
-
-The launchers retain the original experiment hyperparameters. Replace only the `/path/to/...` entries in the corresponding script before launch:
+The launchers preserve the original experiment hyperparameters. Replace only the dataset and output paths in the scripts before launching.
 
 ```bash
-# Stage 1: pruned RoPE
+# Stage 1, pruned RoPE (RealCE configuration)
 bash scripts/train_stage1.sh
 
-# Stage 1: unpruned RoPE
+# Stage 1, unpruned RoPE (UZ-ST configuration)
 bash scripts/train_stage1_unpruned.sh
 
-# Stage 2: RealCE
+# Stage 2, glyph-guided image enhancement
 bash scripts/train_stage2.sh
 ```
 
-Stage 1 accepts a comma-separated `--train_folders` list. Stage 2 expects paired data organized like the supplied Real-CE implementation: LR images in `13mm_aligned_1024/`, targets in `52mm_aligned_1024/`, and glyph masks in `mask_52mm_patchedx4/`. The released stage 1 and stage 2 checkpoints are trained on [UZ-ST](https://huggingface.co/datasets/mxluocv/UZ-ST); use its corresponding paired-folder layout and the matching dataset configuration from the original experiment setup.
+Stage 1 accepts a comma-separated `--train_folders` list. For stage 2, prepare paired folders following the released RealCE convention: LR images in `13mm_aligned_1024/`, targets in `52mm_aligned_1024/`, and glyph masks in `mask_52mm_patchedx4/`. Select `configs/stage1.yaml` for UZ-ST or `configs/realce_stage1.yaml` for RealCE; stage 2 consumes stage-1 glyph guidance rather than this YAML directly.
 
-For stage-1 training, set `--config_yaml configs/stage1.yaml` for UZ-ST and `--config_yaml configs/realce_stage1.yaml` for RealCE. Stage 2 does not consume this stage-1 YAML; it uses the stage-1 output as glyph guidance.
+## Evaluation
 
-## Synthetic degradation
+Prediction and ground-truth filenames must share the same image stem. Auxiliary `*_mask.png` and `*_subsr.png` files are ignored.
 
-`data/deg_mine.py` is the synthetic-data degradation used in our experiments. It applies the two-stage Real-ESRGAN-style blur/noise/JPEG degradation and writes bicubic-upsampled low-quality images to `lr_normal_blur_kernel/` under the dataset root:
+```bash
+python scripts/evaluate.py \
+  --pred-dir outputs/uzst_demo \
+  --gt-dir /path/to/ground_truth
+```
+
+For OCR accuracy (OCR-A), pass a JSON map from filename to expected text:
+
+```bash
+python scripts/evaluate.py \
+  --pred-dir outputs/uzst_demo \
+  --gt-dir /path/to/ground_truth \
+  --labels-json /path/to/labels.json
+```
+
+## Data preparation utilities
+
+### Synthetic degradation
+
+`data/deg_mine.py` implements the synthetic degradation used in our experiments: two-stage Real-ESRGAN-style blur, noise, JPEG compression, and bicubic upsampling. It writes low-quality images to `lr_normal_blur_kernel/` under the dataset root.
 
 ```bash
 python data/deg_mine.py --root_path /path/to/rendered_dataset
 ```
 
-## UZ-ST alignment and color correction
+### UZ-ST alignment and color correction
 
-The UZ-ST preparation utilities are in [`tools/uzst_alignment/`](tools/uzst_alignment/): SIFT/MAGSAC, LoFTR, RIPE, and the color-fix variants used in data preparation. Install their optional dependencies with:
+[`tools/uzst_alignment/`](tools/uzst_alignment/) contains the UZ-ST preparation utilities used for SIFT/MAGSAC alignment, LoFTR, RIPE, and color fixing.
 
 ```bash
 pip install -r tools/uzst_alignment/requirements.txt
 ```
 
-See [`tools/uzst_alignment/README.md`](tools/uzst_alignment/README.md) for the script roles, RIPE dependency, and path configuration note.
+See [`tools/uzst_alignment/README.md`](tools/uzst_alignment/README.md) for script roles, the optional RIPE dependency, and path configuration notes.
 
-## Evaluation
+## Acknowledgements
 
-Image stems must match across prediction and ground-truth directories. Auxiliary `*_mask.png` and `*_subsr.png` files are ignored.
+This release builds on the open-source ecosystems of [Diffusers](https://github.com/huggingface/diffusers), [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR), and their dependencies. We thank their authors and contributors.
 
-```bash
-python scripts/evaluate.py --pred-dir outputs/demo --gt-dir /path/to/gt
-```
+## License
 
-For OCR-A, pass a JSON mapping such as `{ "0001.png": "expected text" }`:
-
-```bash
-python scripts/evaluate.py --pred-dir outputs/demo --gt-dir /path/to/gt --labels-json /path/to/labels.json
-```
+The code is released under the [Apache License 2.0](LICENSE). Third-party model weights and datasets remain subject to their respective licenses and terms of use.
 
 ## Citation
 
-If you find TiGeSR useful, please cite:
+If you find TiGeSR useful for your research, please cite:
 
 ```bibtex
 @inproceedings{luo2026restore,
@@ -212,14 +219,3 @@ If you find TiGeSR useful, please cite:
   year={2026}
 }
 ```
-
-## Release checklist
-
-- [ ] Publish SHA-256 checksums for each released checkpoint.
-- [ ] Add detailed UZ-ST preprocessing instructions and usage terms.
-- [ ] Add author/contact information and a `NOTICE` file for all inherited third-party code.
-- [ ] Run one clean-environment training smoke test and one end-to-end inference/evaluation run.
-
-## License
-
-The code is released under the Apache License 2.0. Third-party model weights and datasets remain subject to their own licenses.
