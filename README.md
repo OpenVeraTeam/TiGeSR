@@ -201,11 +201,25 @@ For OCR-A, pass a JSON mapping such as `{ "0001.png": "expected text" }`:
 python scripts/evaluate.py --pred-dir outputs/demo --gt-dir /path/to/gt --labels-json /path/to/labels.json
 ```
 
+## Citation
+
+If you find TiGeSR useful, please cite:
+
+```bibtex
+@inproceedings{luo2026restore,
+  title={Restore text first, enhance image later: Two-stage scene text image super-resolution with glyph structure guidance},
+  author={Luo, Minxing and Fan, Linlong and Wang, Qiushi and Wu, Ge and Luo, Yiyan and Yu, Yuhang and Chen, Jinwei and Wang, Yaxing and Fan, Qingnan and Yang, Jian},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages={30553--30563},
+  year={2026}
+}
+```
+
 ## Release checklist
 
 - [ ] Publish SHA-256 checksums for each released checkpoint.
 - [ ] Add detailed UZ-ST preprocessing instructions and usage terms.
-- [ ] Add citation details, author/contact information, and a `NOTICE` file for all inherited third-party code.
+- [ ] Add author/contact information and a `NOTICE` file for all inherited third-party code.
 - [ ] Run one clean-environment training smoke test and one end-to-end inference/evaluation run.
 
 ## License
