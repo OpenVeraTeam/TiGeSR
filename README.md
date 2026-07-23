@@ -159,12 +159,6 @@ bash scripts/train_stage1_unpruned.sh
 bash scripts/train_stage2.sh
 ```
 
-| Recipe | Config | Epochs | Batch | Learning rate | Loss / sampling |
-| --- | --- | ---: | ---: | ---: | --- |
-| Stage 1, unpruned | `configs/stage1.yaml` | 4 | 2 | `5e-5` | `lambda_l2=1`, `lambda_focal=0.5` |
-| Stage 1, pruned | `configs/realce_stage1.yaml` | 8 | 2 | `5e-6` | `lambda_l2=1`, `lambda_focal=0.5` |
-| Stage 2, RealCE | - | 100 | 1 | `5e-6` (default) | `timestep=150`, `ctrl_layers=6`, `lambda_l2=1`, `lambda_lpips=5`, `lambda_edge=100` |
-
 Stage 1 accepts a comma-separated `--train_folders` list. Stage 2 expects paired data organized like the supplied Real-CE implementation: LR images in `13mm_aligned_1024/`, targets in `52mm_aligned_1024/`, and glyph masks in `mask_52mm_patchedx4/`. The released stage 1 and stage 2 checkpoints are trained on [UZ-ST](https://huggingface.co/datasets/mxluocv/UZ-ST); use its corresponding paired-folder layout and the matching dataset configuration from the original experiment setup.
 
 For stage-1 training, set `--config_yaml configs/stage1.yaml` for UZ-ST and `--config_yaml configs/realce_stage1.yaml` for RealCE. Stage 2 does not consume this stage-1 YAML; it uses the stage-1 output as glyph guidance.
