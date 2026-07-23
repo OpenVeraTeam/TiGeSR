@@ -1,8 +1,8 @@
 <div align="center">
 
-# TiGeSR: Restore Text First, Enhance Image Later
-
 <img src="assets/tiger-mascot.png" alt="TIGER mascot" width="136" />
+
+# TiGeSR: Restore Text First, Enhance Image Later
 
 **[CVPR 2026] Restore Text First, Enhance Image Later: Two-Stage Scene Text Image Super-Resolution with Glyph Structure Guidance**
 
