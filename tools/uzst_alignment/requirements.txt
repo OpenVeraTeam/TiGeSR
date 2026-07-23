@@ -1,0 +1,6 @@
+# Install the main project requirements first, then install this file.
+kornia>=0.7
+matplotlib>=3.7
+pymagsac>=0.5
+requests>=2.31
+torchvision

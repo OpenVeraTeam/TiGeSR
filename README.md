@@ -177,6 +177,16 @@ For stage-1 training, set `--config_yaml configs/stage1.yaml` for UZ-ST and `--c
 python data/deg_mine.py --root_path /path/to/rendered_dataset
 ```
 
+## UZ-ST alignment and color correction
+
+The UZ-ST preparation utilities are in [`tools/uzst_alignment/`](tools/uzst_alignment/): SIFT/MAGSAC, LoFTR, RIPE, and the color-fix variants used in data preparation. Install their optional dependencies with:
+
+```bash
+pip install -r tools/uzst_alignment/requirements.txt
+```
+
+See [`tools/uzst_alignment/README.md`](tools/uzst_alignment/README.md) for the script roles, RIPE dependency, and path configuration note.
+
 ## Evaluation
 
 Image stems must match across prediction and ground-truth directories. Auxiliary `*_mask.png` and `*_subsr.png` files are ignored.
