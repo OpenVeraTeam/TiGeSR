@@ -23,9 +23,9 @@ Use Linux with an NVIDIA GPU. Create an environment with Python 3.11, install th
 pip install -r requirements.txt
 ```
 
-Download the Stable Diffusion 3.5 Medium files and place them at `weights/stable-diffusion-3.5-medium/`. Download the TIGER checkpoints from [Google Drive](https://drive.google.com/drive/folders/15EJ-1gXHF174wRA5Njwd84EqFkyqZKfx) and place them in `weights/`; they are excluded from git.
+Download the Stable Diffusion 3.5 Medium files and place them at `weights/stable-diffusion-3.5-medium/`. TIGER checkpoints are hosted in the [TiGeSR Hugging Face model repository](https://huggingface.co/mxluocv/TiGeSR) and are excluded from git.
 
-The [UZ-ST dataset](https://huggingface.co/datasets/mxluocv/UZ-ST) is available on Hugging Face. Both TIGER stage 1 and stage 2 released checkpoints are trained on UZ-ST.
+The [UZ-ST dataset](https://huggingface.co/datasets/mxluocv/UZ-ST) is available on Hugging Face. The `uzst/` checkpoint set contains stage 1 and stage 2 models trained on UZ-ST; `realce/` contains the corresponding RealCE checkpoint set.
 
 ## Checkpoint layout
 
@@ -33,26 +33,26 @@ The full pipeline needs three learned checkpoints:
 
 ```text
 weights/
-├── stage1_idm.pth       # stage-1 IDM / glyph restoration model
-├── stage1_encoder.pth   # stage-1 text encoder
-├── stage2_ctrlnet.pkl   # stage-2 ControlNet + VAE adaptation
+├── uzst/
+│   ├── stage1/{model.pth,encoder.pth}
+│   └── stage2/model.pkl
+├── realce/
+│   ├── stage1/{model.pth,encoder.pth}
+│   └── stage2/model.pkl
 └── stable-diffusion-3.5-medium/
 ```
 
-### RealCE checkpoints
+Download one matching checkpoint set with the Hugging Face CLI:
 
-The RealCE checkpoint package is distributed separately and is not tracked by Git. Copy it into `weights/realce/` using this layout:
+```bash
+# UZ-ST-trained checkpoints
+hf download mxluocv/TiGeSR --include "uzst/**" --local-dir weights
 
-```text
-weights/realce/
-├── stage1/
-│   ├── encoder-96000.pth
-│   └── model-96000.pth
-└── stage2/
-    └── model_135200.pkl
+# RealCE checkpoints
+hf download mxluocv/TiGeSR --include "realce/**" --local-dir weights
 ```
 
-For RealCE inference, pass `weights/realce/stage1/model-96000.pth` as `--idm_ckpt_path`, `weights/realce/stage1/encoder-96000.pth` as `--enc_path`, and `weights/realce/stage2/model_135200.pkl` as `--ctrlnet_ckpt_path`.
+For a given set, pass `stage1/model.pth` as `--idm_ckpt_path`, `stage1/encoder.pth` as `--enc_path`, and `stage2/model.pkl` as `--ctrlnet_ckpt_path`. Do not mix checkpoints between `uzst/` and `realce/`.
 
 ## End-to-end inference
 
