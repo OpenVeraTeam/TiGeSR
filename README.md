@@ -69,10 +69,32 @@ hf download mxluocv/TiGeSR --include "uzst/**" --local-dir weights
 hf download mxluocv/TiGeSR --include "realce/**" --local-dir weights
 ```
 
+### Shared inference and training assets
+
+The following files are shared by both the UZ-ST and RealCE checkpoint sets. Download them once from the [TiGeSR Hugging Face model repository](https://huggingface.co/mxluocv/TiGeSR):
+
+```bash
+hf download mxluocv/TiGeSR \
+  --include "SAM/**" \
+  --include "weights/Stable-Diffusion-3.5-medium/saved_prompt_tokens_writing_nocfg.pt" \
+  --include "PNDMscheduler/**" \
+  --local-dir .
+```
+
+- `SAM/BTS-test-test_best.pth` is the SAM checkpoint required for inference.
+- `weights/Stable-Diffusion-3.5-medium/saved_prompt_tokens_writing_nocfg.pt` contains precomputed null-text embeddings used in both inference and training, so the text encoder does not need to be loaded.
+- `PNDMscheduler/scheduler_config.json` is the scheduler configuration for stage 1.
+
 The expected layout is:
 
 ```text
+SAM/
+└── BTS-test-test_best.pth
+PNDMscheduler/
+└── scheduler_config.json
 weights/
+├── Stable-Diffusion-3.5-medium/
+│   └── saved_prompt_tokens_writing_nocfg.pt
 ├── uzst/
 │   ├── stage1/
 │   │   ├── model.pth
