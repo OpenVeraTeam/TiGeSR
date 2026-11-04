@@ -1,42 +1,32 @@
 import argparse
-from sched import scheduler
 import torch
 import torch.nn as nn
 import numpy as np
 from tqdm import tqdm
-from functools import partial
 import torch.nn.functional as F
 import torchvision.transforms as transforms
-from diffusers import UNet2DConditionModel, PNDMScheduler, DDIMScheduler, DDPMScheduler
+from diffusers import DDPMScheduler
 
 from models.DiffTSR.IDM.utils.util import instantiate_from_config, default
 from models.DiffTSR.IDM.modules.diffusionmodules.util import (
-    make_ddim_sampling_parameters,
-    make_ddim_timesteps,
-)
-from models.DiffTSR.IDM.modules.diffusionmodules.util import (
-    make_beta_schedule,
-    noise_like,
     extract_into_tensor,
 )
 
 
-from models.DiffTSR.TDM.models.diffusion_multinomial import (
-    extract,
-    log_add_exp,
-    cosine_beta_schedule,
-)
-from models.DiffTSR.TDM.models.diffusion_multinomial import (
-    log_1_min_a,
-    index_to_log_onehot,
-    log_onehot_to_index,
-)
-
-from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import (
-    retrieve_timesteps,
-)
 from seg_loss.focal_loss import BinaryFocalLoss
 from seg_loss.dice_loss import DiceLoss
+
+
+def sigmoid_focal_loss(inputs, targets, num_masks, alpha=0.25, gamma=2):
+    """Original stage-1 glyph loss from the training repository."""
+    prob = inputs.sigmoid()
+    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    p_t = prob * targets + (1 - prob) * (1 - targets)
+    loss = ce_loss * ((1 - p_t) ** gamma)
+    if alpha >= 0:
+        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+        loss = alpha_t * loss
+    return loss.mean(1).sum() / num_masks
 
 
 class Baseline_pipline(nn.Module):
@@ -51,6 +41,7 @@ class Baseline_pipline(nn.Module):
         transformer_encoder_config=None,
         VAE_model_config=None,
         Text_Prediction_config=None,
+        scheduler_path="weights/DiffTSR/PNDMscheduler",
     ):
         super().__init__()
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -64,7 +55,7 @@ class Baseline_pipline(nn.Module):
         self.transformer_encoder = instantiate_from_config(transformer_encoder_config)
         self.VAE_model = instantiate_from_config(VAE_model_config)
         self.Text_Prediction = instantiate_from_config(Text_Prediction_config)
-        self.scheduler = DDPMScheduler.from_pretrained("weights/DiffTSR/PNDMscheduler")
+        self.scheduler = DDPMScheduler.from_pretrained(scheduler_path)
         # self.scheduler.set_timesteps(num_inference_steps=self.inference_timesteps)
 
     def to_device(self, device=None):
@@ -351,26 +342,46 @@ class DualBranchMaskGen(Baseline_pipline):
         mask = self.VAE_model.decode(mask)
         return mask, img
 
-from hi_sam.modeling.predictor import SamPredictor
-from hi_sam.modeling.build import model_registry
-
 class UNet2OutPipeline(Baseline_pipline):
-    def __init__(self, max_length=24, scheduler_type="PNDM", num_classes=6736, transformer_dim=768, scale_factor=0.18215,IDM_Unet_config=None, transformer_encoder_config=None, VAE_model_config=None, Text_Prediction_config=None):
-        super().__init__(max_length, scheduler_type, num_classes, transformer_dim, scale_factor, IDM_Unet_config, transformer_encoder_config, VAE_model_config, Text_Prediction_config)
-        model_type="vit_h"
-        hi_sam_ckpt="weights/BTS-test-test_best.pth"
+    def __init__(self, max_length=24, scheduler_type="PNDM", num_classes=6736, transformer_dim=768, scale_factor=0.18215,IDM_Unet_config=None, transformer_encoder_config=None, VAE_model_config=None, Text_Prediction_config=None, hi_sam_ckpt="weights/BTS-test-test_best.pth", hi_sam_model_type="vit_h", scheduler_path="weights/DiffTSR/PNDMscheduler"):
+        super().__init__(max_length, scheduler_type, num_classes, transformer_dim, scale_factor, IDM_Unet_config, transformer_encoder_config, VAE_model_config, Text_Prediction_config, scheduler_path=scheduler_path)
+        self.hi_sam_ckpt = hi_sam_ckpt
+        self.hi_sam_model_type = hi_sam_model_type
+        self.predictor = None
+
+    def _get_predictor(self):
+        # Training uses supplied glyph masks. Load Hi-SAM only when sampling
+        # requires an initial mask, rather than on every model construction.
+        if self.predictor is not None:
+            return self.predictor
+        from pathlib import Path
+
+        if not Path(self.hi_sam_ckpt).is_file():
+            raise FileNotFoundError(
+                f"Missing Hi-SAM checkpoint: {self.hi_sam_ckpt}. "
+                "See the README pretrained-asset instructions."
+            )
+        try:
+            from hi_sam.modeling.predictor import SamPredictor
+            from hi_sam.modeling.build import model_registry
+        except ImportError as exc:
+            raise ImportError(
+                "The bundled Hi-SAM runtime could not be imported. "
+                "Install requirements.txt and run from the repository root."
+            ) from exc
         hi_sam_args = {
-            'model_type': model_type,
-            "checkpoint": hi_sam_ckpt,
+            'model_type': self.hi_sam_model_type,
+            "checkpoint": self.hi_sam_ckpt,
             "attn_layers": 1,
             "prompt_len": 12,
             "hier_det": False,
         }
         hi_sam_args = argparse.Namespace(**hi_sam_args)
-        hisam = model_registry[model_type](hi_sam_args)
+        hisam = model_registry[self.hi_sam_model_type](hi_sam_args)
         hisam.eval()
         hisam.to(self.device)
         self.predictor = SamPredictor(hisam)
+        return self.predictor
 
     def load_model(
         self,
@@ -456,8 +467,9 @@ class UNet2OutPipeline(Baseline_pipline):
         if lq_image.ndim != 4:
             lq_image = lq_image.unsqueeze(0)
 
-        self.predictor.set_image(lq_image[0].permute(1, 2, 0).cpu().numpy())
-        _, sub_mask, _, _ = self.predictor.predict_torch(multimask_output=False)
+        predictor = self._get_predictor()
+        predictor.set_image(lq_image[0].permute(1, 2, 0).cpu().numpy())
+        _, sub_mask, _, _ = predictor.predict_torch(multimask_output=False)
         lq_image = lq_image.to(self.device)
         c_t = self.Text_Prediction.get_padding_label_from_text(text).to(self.device)
         z_LR = self.VAE_model.encode(lq_image).sample() * self.scale_factor
@@ -507,8 +519,9 @@ class UNet2OutPipeline(Baseline_pipline):
         lq_image = self.prepare_image_tensor(input_image) # 将输入统一转为Tensor
 
         # 获取初步的掩码 sub_mask
-        self.predictor.set_image(lq_image[0].permute(1, 2, 0).cpu().numpy())
-        _, sub_mask, _, _ = self.predictor.predict_torch(multimask_output=False)
+        predictor = self._get_predictor()
+        predictor.set_image(lq_image[0].permute(1, 2, 0).cpu().numpy())
+        _, sub_mask, _, _ = predictor.predict_torch(multimask_output=False)
 
             # 2. 检查长宽比
         C, H, W = lq_image.shape[1:] # 获取 C, H, W
@@ -681,3 +694,110 @@ class Unet2OutPrunedPipeline(UNet2OutPipeline):
         del state_dict, idm_state
         torch.cuda.empty_cache()
         # print(f"VAE_model loaded from {path}")
+
+
+class UNet2OutPipeline_wEncoder(UNet2OutPipeline):
+    """Stage-1 training model from DiffTSR/train_mask_2OutwEncoder_bucket.py.
+
+    The inference-only UNet2OutPipeline returns two losses. This training
+    variant restores the original four-loss interface and trains the encoder.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from models.DiffTSR.sobel_edge_loss import DifferentiableEdgeDetector
+
+        self.edge_det = DifferentiableEdgeDetector().to(self.device).eval()
+        self.edge_det.requires_grad_(False)
+
+    def load_model(
+        self,
+        path="ckpt/DiffTSR_new.ckpt",
+        IDM_path="ckpt/IDM_Unet.ckpt",
+        transformer_path="ckpt/Bert_only.ckpt",
+        is_shape_diff=True,
+        is_pruned=False,
+    ):
+        state_dict = torch.load(path, map_location="cpu")
+        idm_checkpoint = torch.load(IDM_path, map_location="cpu")
+        idm_state = idm_checkpoint.get("state_dict_dm", idm_checkpoint.get("IDM_Unet"))
+        if idm_state is None:
+            raise KeyError("Stage-1 checkpoint must contain state_dict_dm or IDM_Unet")
+        curr_state = self.IDM_Unet.state_dict()
+        for key in curr_state:
+            if (
+                "out_mask." in key or "out.2" in key or "input_blocks.0.0" in key
+            ) and (is_shape_diff or is_pruned):
+                continue
+            curr_state[key] = idm_state[key]
+        print("IDM_Unet:", self.IDM_Unet.load_state_dict(curr_state, strict=True))
+
+        encoder_state = torch.load(transformer_path, map_location="cpu")
+        # The original training code keeps the new positional/logit layers
+        # when initializing an encoder with a different sequence shape.
+        curr_encoder = self.transformer_encoder.state_dict()
+        for key in curr_encoder:
+            if key in encoder_state and curr_encoder[key].shape == encoder_state[key].shape:
+                curr_encoder[key] = encoder_state[key]
+            elif not is_shape_diff:
+                raise ValueError(f"Encoder checkpoint shape/key mismatch: {key}")
+            elif key not in {
+                "transformer.pos_emb.emb.weight",
+                "transformer.to_logits.weight",
+                "transformer.to_logits.bias",
+            }:
+                raise ValueError(f"Unexpected encoder checkpoint shape/key mismatch: {key}")
+        print("transformer_encoder:", self.transformer_encoder.load_state_dict(curr_encoder, strict=True))
+        print("VAE_model:", self.VAE_model.load_state_dict(state_dict["VAE_model"], strict=True))
+        torch.cuda.empty_cache()
+
+    def set_train(self):
+        self.VAE_model.eval()
+        self.VAE_model.requires_grad_(False)
+        self.Text_Prediction.eval()
+        self.Text_Prediction.requires_grad_(False)
+        self.IDM_Unet.train()
+        self.transformer_encoder.train()
+
+    def set_unet_train(self):
+        self.set_train()
+        self.IDM_Unet.set_unet_train()
+
+    def forward(self, lq=None, hq=None, mask=None, text=None, is_ver=None):
+        z_LR = self.VAE_model.encode(lq).sample() * self.scale_factor
+        z_HR = self.VAE_model.encode(hq).sample() * self.scale_factor
+        z_mask = self.VAE_model.encode(mask).sample() * self.scale_factor
+        self.scheduler.timesteps = torch.from_numpy(np.arange(0, 1000)[::-1].copy()).to(z_LR.device)
+        cond_t = torch.stack([
+            self.Text_Prediction.get_padding_label_from_text(item).to(z_LR.device)
+            for item in text
+        ])
+        cond_t = self.transformer_encoder(cond_t.long()).to(self.device)
+        noise_mask = torch.randn_like(z_mask, device=self.device)
+        noise = torch.randn_like(z_HR, device=self.device)
+        timesteps = torch.randint(0, 999, (1,), device=self.device).expand(z_mask.shape[0]).long()
+        z_mask_t = self.scheduler.add_noise(z_mask, noise_mask, timesteps)
+        z_t = self.scheduler.add_noise(z_HR, noise, timesteps)
+        e_t, e_mask_t = self.IDM_Unet(
+            x=torch.cat([z_t, z_mask_t, z_LR], dim=1),
+            timesteps=timesteps,
+            context=cond_t,
+        )
+        z0_mask = self.scheduler.step(e_mask_t, timesteps[0], z_mask_t, return_dict=False)[1]
+        x0_mask = self.VAE_model.decode(z0_mask / self.scale_factor)
+        eps_loss = F.mse_loss(e_t, noise) + F.mse_loss(e_mask_t, noise_mask)
+        # Preserve the executed original experiment: the next-line unary
+        # '+ dice_loss(...)' in the source did not contribute to mask_loss.
+        mask_loss = 20 * sigmoid_focal_loss(x0_mask.flatten(1), mask.flatten(1), mask.shape[0])
+        edge_loss = F.mse_loss(self.edge_det(x0_mask), self.edge_det(mask))
+        l2_loss = F.mse_loss(x0_mask, mask)
+        return eps_loss, mask_loss, l2_loss, edge_loss
+
+    def Baseline_sample(self, *args, **kwargs):
+        mask, image = super().Baseline_sample(*args, **kwargs)
+
+        def as_image(tensor):
+            tensor = tensor.detach().cpu().clamp(0.0, 1.0) * 255
+            return tensor.numpy().astype(np.uint8)[0].transpose(1, 2, 0)
+
+        return as_image(mask), as_image(image)

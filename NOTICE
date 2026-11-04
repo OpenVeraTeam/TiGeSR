@@ -1,0 +1,15 @@
+TiGeSR includes code adapted from DiffTSR (Yuzhe Zhang et al., CVPR 2024),
+Hi-SAM (Mingye Yang et al.), Segment Anything (Meta Platforms, Inc.), and
+BasicSR (XPixelGroup), in addition to the dependencies listed in requirements/.
+
+The hi_sam runtime files were recovered from the authors' original TiGeSR
+working tree and contain project-specific modifications. Their original
+copyright headers are retained. The upstream Hi-SAM repository is
+https://github.com/ymy-k/Hi-SAM and uses Apache License 2.0.
+
+The seg_loss focal and Dice implementations were recovered unchanged from
+the authors' original stage-1 source tree. The stage-1 Sobel loss and
+UNet2OutPipeline_wEncoder training implementation were recovered from that
+same tree.
+
+Third-party weights and datasets remain governed by their upstream terms.

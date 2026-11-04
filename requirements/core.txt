@@ -1,0 +1,30 @@
+# Python 3.11 compatibility baseline. Direct dependencies are pinned;
+# this is not a full transitive lockfile or a GPU-reproduction claim.
+torch==2.5.1
+torchvision==0.20.1
+diffusers==0.32.2
+transformers==4.48.3
+peft==0.14.0
+accelerate==1.2.1
+huggingface-hub==0.34.4
+safetensors==0.5.3
+omegaconf==2.3.0
+numpy==1.26.4
+Pillow==11.1.0
+opencv-python-headless==4.10.0.84
+scikit-image==0.24.0
+# The inherited BSRGAN degradation uses scipy.interpolate.interp2d.
+scipy==1.13.1
+einops==0.8.0
+kornia==0.7.4
+easydict==1.13
+pytorch-lightning==2.4.0
+torchmetrics==1.4.3
+axial-positional-embedding==0.2.1
+linear-attention-transformer==0.19.1
+zhconv==1.4.3
+packaging==24.2
+PyYAML==6.0.2
+tqdm==4.67.1
+sentencepiece==0.2.0
+protobuf==5.29.3

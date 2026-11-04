@@ -14,7 +14,14 @@ from models.recognizer import adjust_image, restore_image,restore_image1,restore
 import argparse
 import torchvision.transforms.functional as TF
 import torch.nn.functional as F
-from paddleocr import PaddleOCR
+def PaddleOCR(**kwargs):
+    # Cached-annotation inference must not import Paddle or its CUDA libraries.
+    try:
+        from paddleocr import PaddleOCR as OCR
+    except ImportError as exc:
+        raise ImportError("Online OCR requires the separate OCR dependencies. See docs/installation.md, or supply --anno_path.") from exc
+    kwargs.setdefault("ocr_version", "PP-OCRv5")
+    return OCR(**kwargs)
 from utils.img_util import (
     remove_padding,
     resize_and_pad,
@@ -315,8 +322,6 @@ class TextSR(nn.Module):
         return SR, mask
 
 
-from hi_sam.modeling.predictor import SamPredictor
-from hi_sam.modeling.build import model_registry
 
 
 class TextSR_hisam(TextSR):
@@ -338,6 +343,8 @@ class TextSR_hisam(TextSR):
             gradient_checkpointing,
             num_ctrl_layers,
         )
+        from hi_sam.modeling.predictor import SamPredictor
+        from hi_sam.modeling.build import model_registry
         hi_sam_args = {
             'model_type': model_type,
             "checkpoint": hi_sam_ckpt,
@@ -982,18 +989,28 @@ class TextSR_2Outwskip(TextSR_2Out):
         ckpt_dir="./weights/stable-diffusion-3.5-medium",
         gradient_checkpointing=True,
         num_ctrl_layers=6,
+        difftsr_ckpt_path="weights/DiffTSR/DiffTSR_new.ckpt",
+        scheduler_path=None,
+        hi_sam_ckpt=None,
+        prompt_cache_path=None,
     ):
-        super().__init__(DiffTSR_yaml_config,
-        target_timestep,
-        ckpt_dir,
-        gradient_checkpointing,
-        num_ctrl_layers)
+        nn.Module.__init__(self)
+        self.execution_device = torch.device("cuda")
+        config = OmegaConf.load(DiffTSR_yaml_config)
+        if scheduler_path is not None:
+            config.model.params.scheduler_path = scheduler_path
+        if hi_sam_ckpt is not None:
+            config.model.params.hi_sam_ckpt = hi_sam_ckpt
+        self.net_mask_gen = instantiate_from_config(config.model)
+        self.difftsr_ckpt_path = difftsr_ckpt_path
+        self.ocr = None
         # initializing phase 2
         self.net_pix2pix = SRCtrlnetSkipConnectionPipeline(
             target_timestep=target_timestep,
             ckpt_dir=ckpt_dir,
             gradient_checkpointing=gradient_checkpointing,
             num_ctrl_layers=num_ctrl_layers,
+            prompt_cache_path=prompt_cache_path,
         )
 
         # net_pix2pix.load_model(args.ckpt_path)
@@ -1005,7 +1022,7 @@ class TextSR_2Outwskip(TextSR_2Out):
         enc_path="weights/DiffTSR/Bert_only.ckpt",
     ):
         self.net_mask_gen.load_model(
-            path="weights/DiffTSR/DiffTSR_new.ckpt",
+            path=self.difftsr_ckpt_path,
             IDM_path=idm_ckpt,
             transformer_path=enc_path,
             is_shape_diff=False,
@@ -1445,6 +1462,26 @@ class TextSR_1Out(TextSR_2Outwskip):
 # 文本超分辨率输出类
 from utils.ocr_util import randomly_replace_chars_enhanced
 class TextSR_multiscale(TextSR_2Outwskip):
+    @torch.no_grad()
+    def inference(self, lq, anno=None, tiling=True):
+        # Route both OCR modes through exactly the same crop/restore geometry.
+        if anno is None:
+            if self.ocr is None:
+                self.ocr = PaddleOCR(
+                    use_doc_orientation_classify=True,
+                    use_doc_unwarping=False,
+                    use_textline_orientation=True,
+                    device=getattr(self, "ocr_device", "cpu"),
+                )
+            rgb = lq[0].detach().permute(1, 2, 0).cpu().numpy()
+            # PaddleOCR ndarray inputs are BGR, whereas image tensors are RGB.
+            bgr = cv2.cvtColor((rgb.clip(0, 1) * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+            anno = self.ocr.predict(bgr)[0]
+        from utils.annotations import resize_annotation
+        size = (lq.shape[-1], lq.shape[-2])
+        anno = resize_annotation(anno, size, size)
+        return self.inference_wanno(lq, anno, tiling=tiling)
+
     @torch.no_grad()
     def inference_woPad(self, lq):
         """

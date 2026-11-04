@@ -5,7 +5,7 @@ set -euo pipefail
 CUDA_VISIBLE_DEVICES=2,3 accelerate launch --main_process_port 29501 scripts/train_stage1.py \
   --is_shape_same \
   --lambda_l2 1 --lambda_focal 0.5 \
-  --config_yaml configs/realce_stage1.yaml \
+  --config_yaml configs/realce_stage1_train.yaml \
   --output_dir outputs/stage1_pruned \
   --train_folders /path/to/train_a,/path/to/train_b,/path/to/train_c \
   --test_folder /path/to/val \

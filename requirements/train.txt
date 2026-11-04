@@ -1,0 +1,4 @@
+-r core.txt
+lpips==0.1.4
+tensorboard==2.18.0
+matplotlib==3.9.4

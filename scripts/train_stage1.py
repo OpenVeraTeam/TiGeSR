@@ -1,6 +1,9 @@
 import gc
 import math
 import os
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from PIL import Image
 import diffusers
 import torch
@@ -33,10 +36,10 @@ def parse_args_training(input_args=None):
    """
     parser = argparse.ArgumentParser()
     # args for continue training
-    parser.add_argument("--ckpt_path", default="./ckpt/DiffTSR_new.ckpt")
-    parser.add_argument("--idm_ckpt", default="./ckpt/IDM_Unet.pkl")
-    parser.add_argument("--encoder_ckpt", default="./ckpt/Bert_only.ckpt")
-    parser.add_argument("--config_yaml", default="model/Baseline_config_ori.yaml")
+    parser.add_argument("--ckpt_path", default="weights/DiffTSR/DiffTSR_new.ckpt")
+    parser.add_argument("--idm_ckpt", default="weights/uzst/stage1/model.pth")
+    parser.add_argument("--encoder_ckpt", default="weights/uzst/stage1/encoder.pth")
+    parser.add_argument("--config_yaml", default="configs/stage1_train.yaml")
 
     # args for the loss function
     parser.add_argument("--lambda_eps", type=float, default=1.0)

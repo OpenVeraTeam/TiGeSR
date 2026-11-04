@@ -12,11 +12,11 @@ import torch.nn.functional as F
 import torch.utils.data as data
 import torchvision.transforms as transforms
 from PIL import Image
-from basicsr.data.degradations import circular_lowpass_kernel, random_mixed_kernels
-from basicsr.data.degradations import random_add_gaussian_noise_pt, random_add_poisson_noise_pt
-from basicsr.data.transforms import paired_random_crop
-from basicsr.utils import DiffJPEG, USMSharp
-from basicsr.utils.img_process_util import filter2D
+from data.degradation.degradation import circular_lowpass_kernel, random_mixed_kernels
+from data.degradation.degradation import random_add_gaussian_noise_pt, random_add_poisson_noise_pt
+from data.degradation.diffjpeg import DiffJPEG
+from data.degradation.image.usm_sharp import USMSharp
+from data.degradation.image.common import filter2D
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from torchvision.utils import save_image
@@ -142,8 +142,12 @@ class RealESRGANDataset(data.Dataset):
         return len(self.gt_data)
 
 
-def realesrgan_degradation(batch, args_degradation, use_usm=True, sf=4,jpeger=DiffJPEG(differentiable=False).cuda(),usm_sharpener = USMSharp().cuda()):
+def realesrgan_degradation(batch, args_degradation, use_usm=True, sf=4,jpeger=None,usm_sharpener=None):
     im_gt = batch['gt'].cuda()
+    if jpeger is None:
+        jpeger = DiffJPEG(differentiable=False).to(im_gt.device)
+    if usm_sharpener is None:
+        usm_sharpener = USMSharp().to(im_gt.device)
     if use_usm:
         im_gt = usm_sharpener(im_gt)
     im_gt = im_gt.to(memory_format=torch.contiguous_format).float()

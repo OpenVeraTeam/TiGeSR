@@ -1,0 +1,3 @@
+# Synthetic degradation and dataset preparation, in the PyTorch environment.
+-r core.txt
+matplotlib==3.9.4

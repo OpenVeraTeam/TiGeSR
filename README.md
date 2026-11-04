@@ -26,8 +26,9 @@ Minxing Luo<sup>1,2,*</sup> · Linlong Fan<sup>2,*</sup> · Qiushi Wang<sup>2,3<
 
 ## News
 
+- **2026.11** — Restore omitted training/loss and Hi-SAM code; separate model/OCR/evaluation dependencies; align cached and online OCR geometry. See [release fixes and validation](docs/release_fixes.md), [installation](docs/installation.md) and [model assets](docs/weights.md).
 - **2026.07** — Code, inference, training, evaluation, UZ-ST alignment utilities, and model links are released.
-- **2026.06** — TiGeSR is accepted to CVPR 2026.
+- **CVPR 2026** — TiGeSR paper.
 
 ## Overview
 
@@ -39,91 +40,75 @@ The first stage reconstructs legible glyph structures from a low-quality scene i
 
 ## Dependencies and installation
 
-Tested on Linux with NVIDIA GPUs. Create a Python environment, install a PyTorch build compatible with your CUDA version from [pytorch.org](https://pytorch.org/get-started/locally/), then install the project dependencies:
+Use Python 3.11 and separate the PyTorch model environment from the PaddleOCR environment. This avoids installing competing CUDA/NCCL packages into one environment.
 
 ```bash
 git clone git@github.com:OpenVeraTeam/TiGeSR.git
 cd TiGeSR
-
 conda create -n tiger python=3.11 -y
 conda activate tiger
-pip install -r requirements.txt
+python -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+python -m pip install -r requirements.txt
+python -m pip check
 ```
 
-Download the Stable Diffusion 3.5 Medium files and place them in `weights/stable-diffusion-3.5-medium/`.
+See [installation instructions](docs/installation.md) for the separate OCR/evaluation environments and optional training/data packages. The pinned versions are a compatibility baseline; Linux GPU reproduction still needs a full checkpoint run.
 
 ## Pre-trained models
 
-We provide two internally matched checkpoint sets in the [TiGeSR Hugging Face model repository](https://huggingface.co/mxluocv/TiGeSR):
-
-- **UZ-ST**: stage 1 and stage 2 trained on [UZ-ST](https://huggingface.co/datasets/mxluocv/UZ-ST).
-- **RealCE**: stage 1 and stage 2 trained on RealCE; its stage-1 model is the pruned RoPE variant.
-
-Download exactly one matching set. Do not mix stage-1 and stage-2 weights across sets.
+The [TiGeSR model repository](https://huggingface.co/mxluocv/TiGeSR) provides **UZ-ST** and **RealCE** checkpoint sets. Download one matching set together with the shared Hi-SAM, scheduler and prompt-cache assets:
 
 ```bash
-# UZ-ST-trained checkpoints
-hf download mxluocv/TiGeSR --include "uzst/**" --local-dir weights
-
-# RealCE-trained checkpoints
-hf download mxluocv/TiGeSR --include "realce/**" --local-dir weights
+python scripts/download_weights.py --dataset uzst
+# Or: python scripts/download_weights.py --dataset realce
 ```
 
-### Shared inference and training assets
-
-The following files are shared by both the UZ-ST and RealCE checkpoint sets. Download them once from the [TiGeSR Hugging Face model repository](https://huggingface.co/mxluocv/TiGeSR):
-
-```bash
-hf download mxluocv/TiGeSR \
-  --include "SAM/**" \
-  --include "weights/Stable-Diffusion-3.5-medium/saved_prompt_tokens_writing_nocfg.pt" \
-  --include "PNDMscheduler/**" \
-  --local-dir .
-```
-
-- `SAM/BTS-test-test_best.pth` is the SAM checkpoint required for inference.
-- `weights/Stable-Diffusion-3.5-medium/saved_prompt_tokens_writing_nocfg.pt` contains precomputed null-text embeddings used in both inference and training, so the text encoder does not need to be loaded.
-- `PNDMscheduler/scheduler_config.json` is the scheduler configuration for stage 1.
-
-The expected layout is:
+Also obtain the upstream DiffTSR base checkpoint (for its VAE) and Stable Diffusion 3.5 Medium. Follow the complete [asset list and path instructions](docs/weights.md). A separate `Bert_only.ckpt` is unnecessary when using the set-specific `encoder.pth`.
 
 ```text
-SAM/
-└── BTS-test-test_best.pth
-PNDMscheduler/
-└── scheduler_config.json
 weights/
-├── Stable-Diffusion-3.5-medium/
-│   └── saved_prompt_tokens_writing_nocfg.pt
+├── DiffTSR/
+│   ├── DiffTSR_new.ckpt
+│   └── PNDMscheduler/scheduler_config.json
+├── BTS-test-test_best.pth
 ├── uzst/
-│   ├── stage1/
-│   │   ├── model.pth
-│   │   └── encoder.pth
+│   ├── stage1/{model.pth,encoder.pth}
 │   └── stage2/model.pkl
 ├── realce/
-│   ├── stage1/
-│   │   ├── model.pth
-│   │   └── encoder.pth
+│   ├── stage1/{model.pth,encoder.pth}
 │   └── stage2/model.pkl
 └── stable-diffusion-3.5-medium/
+    ├── transformer/
+    ├── vae/
+    ├── scheduler/
+    └── saved_prompt_tokens_writing_nocfg.pt
 ```
 
-Use `configs/stage1.yaml` with `weights/uzst/`. Use `configs/realce_stage1.yaml` with `weights/realce/`; this is the released pruned RoPE configuration (`RoPE2Out_mask_pruned_config_hybridwEncoder.yaml`).
+Use `configs/stage1.yaml` with `weights/uzst/` and the pruned `configs/realce_stage1.yaml` with `weights/realce/`. Keep each stage-1, encoder and stage-2 set together.
+
+The released cache is named `writing_nocfg`; select it explicitly in the commands below. To instead generate the original code's empty-prompt cache, use [the preparation script](docs/weights.md#sd35-medium-and-prompt-embeddings).
+
+```bash
+python scripts/check_setup.py --dataset uzst \
+  --prompt-cache weights/stable-diffusion-3.5-medium/saved_prompt_tokens_writing_nocfg.pt
+```
 
 ## ⚡ Inference
 
 ### Run the full TIGER pipeline
 
-Run from the repository root. Without `--anno_path`, TIGER runs PP-OCRv5 internally. The following UZ-ST command is the default example:
+Run from the repository root. Generate annotations in the separate OCR environment first, then run the following command in the PyTorch environment. Omitting `--anno_path` enables online OCR and requires PaddleOCR in that environment.
 
 ```bash
 python scripts/inference.py \
   --test_folder /path/to/lr_images \
+  --anno_path /path/to/annotations \
   --output_dir outputs/uzst_demo \
   --difftsr_config configs/stage1.yaml \
   --idm_ckpt_path weights/uzst/stage1/model.pth \
   --enc_path weights/uzst/stage1/encoder.pth \
   --ctrlnet_ckpt_path weights/uzst/stage2/model.pkl \
+  --prompt_cache_path weights/stable-diffusion-3.5-medium/saved_prompt_tokens_writing_nocfg.pt \
   --timestep 150 --ctrl_layers 6 --enable_tiling
 ```
 
@@ -132,22 +117,24 @@ For RealCE, only switch to the matching checkpoint paths and pruned stage-1 conf
 ```bash
 python scripts/inference.py \
   --test_folder /path/to/lr_images \
+  --anno_path /path/to/annotations \
   --output_dir outputs/realce_demo \
   --difftsr_config configs/realce_stage1.yaml \
   --idm_ckpt_path weights/realce/stage1/model.pth \
   --enc_path weights/realce/stage1/encoder.pth \
   --ctrlnet_ckpt_path weights/realce/stage2/model.pkl \
+  --prompt_cache_path weights/stable-diffusion-3.5-medium/saved_prompt_tokens_writing_nocfg.pt \
   --timestep 150 --ctrl_layers 6 --enable_tiling
 ```
 
 ### Use your own PP-OCRv5 annotations
 
-Create reusable annotations from the integrated OCR path:
+In the [OCR environment](docs/installation.md#2-pp-ocrv5-annotation-environment), create reusable annotations using the same image preparation and PP-OCRv5 model as online inference:
 
 ```bash
 python scripts/make_ocr_annotations.py \
   --input-dir /path/to/lr_images \
-  --output-dir /path/to/annotations
+  --output-dir /path/to/annotations --device cpu
 ```
 
 You may also supply manually corrected annotations or annotations produced by [PaddleOCR / PP-OCRv5](https://github.com/PaddlePaddle/PaddleOCR) or [PaddleOCR2Pytorch](https://github.com/frotms/PaddleOCR2Pytorch). Use one file per image at `<annotation_dir>/<image-stem>_res.json`, then add `--anno_path /path/to/annotations` to inference.
@@ -162,11 +149,11 @@ You may also supply manually corrected annotations or annotations produced by [P
 }
 ```
 
-`dt_polys` must be in pixels of the original input image. `rec_scores` and `textline_orientation_angles` are optional. TIGER supplies defaults of `1.0` and `0` when absent, and scales polygons internally when tiling is enabled.
+For manual JSON, `dt_polys` refer to the original image after the specified document rotation. New caches record the pre-rotation image size in `tiger_image_size`; TIGER uses it to scale coordinates to the inference image. Legacy JSON without this metadata is assumed to describe the original input. `rec_scores` and `textline_orientation_angles` are optional (defaults: `1.0` and `0`). Cached and online OCR now use the same crop/restore code.
 
 ## Train
 
-The launchers preserve the original experiment hyperparameters. Replace only the dataset and output paths in the scripts before launching.
+The launchers preserve the original experiment hyperparameters. Install `requirements/train.txt`, then replace the dataset/checkpoint/output paths in the scripts. The training-specific YAMLs select the original four-loss stage-1 implementation.
 
 ```bash
 # Stage 1, pruned RoPE (RealCE configuration)
@@ -179,11 +166,11 @@ bash scripts/train_stage1_unpruned.sh
 bash scripts/train_stage2.sh
 ```
 
-Stage 1 accepts a comma-separated `--train_folders` list. For stage 2, prepare paired folders following the released RealCE convention: LR images in `13mm_aligned_1024/`, targets in `52mm_aligned_1024/`, and glyph masks in `mask_52mm_patchedx4/`. Select `configs/stage1.yaml` for UZ-ST or `configs/realce_stage1.yaml` for RealCE; stage 2 consumes stage-1 glyph guidance rather than this YAML directly.
+Stage 1 accepts a comma-separated `--train_folders` list. For stage 2, prepare paired folders following the released RealCE convention: LR images in `13mm_aligned_1024/`, targets in `52mm_aligned_1024/`, and glyph masks in `mask_52mm_patchedx4/`. Stage-1 training uses `configs/stage1_train.yaml` or `configs/realce_stage1_train.yaml`; the shorter YAML names above are for inference. Stage 2 consumes stage-1 glyph guidance. Its `--sd3_dir` and `--prompt_cache_path` options select the SD3 model and prompt embeddings; all original optimization parameters are retained.
 
 ## Evaluation
 
-Prediction and ground-truth filenames must share the same image stem. Auxiliary `*_mask.png` and `*_subsr.png` files are ignored.
+Use the separate [evaluation environment](docs/installation.md#4-image-quality-evaluation-environment), because PyIQA pins an older Transformers version. Prediction and ground-truth filenames must share the same image stem. Auxiliary `*_mask.png` and `*_subsr.png` files are ignored.
 
 ```bash
 python scripts/evaluate.py \
@@ -191,13 +178,14 @@ python scripts/evaluate.py \
   --gt-dir /path/to/ground_truth
 ```
 
-For OCR accuracy (OCR-A), pass a JSON map from filename to expected text:
+For OCR accuracy (OCR-A), run the annotation script on the predictions in the OCR environment, then pass the cached results and a filename-to-expected-text JSON map:
 
 ```bash
 python scripts/evaluate.py \
   --pred-dir outputs/uzst_demo \
   --gt-dir /path/to/ground_truth \
-  --labels-json /path/to/labels.json
+  --labels-json /path/to/labels.json \
+  --ocr-annotations /path/to/prediction_annotations
 ```
 
 ## Data preparation utilities
@@ -222,7 +210,7 @@ See [`tools/uzst_alignment/README.md`](tools/uzst_alignment/README.md) for scrip
 
 ## Acknowledgements
 
-This release builds on the open-source ecosystems of [Diffusers](https://github.com/huggingface/diffusers), [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR), and their dependencies. We thank their authors and contributors.
+This release includes modified [DiffTSR](https://github.com/YuzheZhang-1999/DiffTSR) and [Hi-SAM](https://github.com/ymy-k/Hi-SAM) code and builds on [Diffusers](https://github.com/huggingface/diffusers), [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR), and their dependencies. We thank their authors and contributors.
 
 ## License
 

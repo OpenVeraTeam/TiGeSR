@@ -1,18 +1,13 @@
-from typing import Any, Dict, Optional, Union,Tuple
-import numpy as np
+from pathlib import Path
+from typing import Optional, Union, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from diffusers import SD3ControlNetModel, AutoencoderKL, DDPMScheduler, SD3Transformer2DModel, Transformer2DModel,FlowMatchEulerDiscreteScheduler,ControlNetModel,UNet2DConditionModel
-from diffusers import DiffusionPipeline
-from diffusers.loaders import FromSingleFileMixin, SD3IPAdapterMixin, SD3LoraLoaderMixin
+from diffusers import SD3ControlNetModel, AutoencoderKL, DDPMScheduler, SD3Transformer2DModel, FlowMatchEulerDiscreteScheduler
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.schedulers.scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteSchedulerOutput
-from diffusers.models.modeling_outputs import Transformer2DModelOutput
-from diffusers.models.controlnet import zero_module
-from diffusers.models.embeddings import PatchEmbed, CombinedTimestepTextProjEmbeddings
-from diffusers.models.attention import JointTransformerBlock
 from diffusers.pipelines.stable_diffusion_3.pipeline_stable_diffusion_3_img2img import retrieve_latents
+from utils.prompt_cache import load_prompt_cache
 
 class FlowMatchEulerDiscreteScheduler1Step(FlowMatchEulerDiscreteScheduler):
     def step(
@@ -74,14 +69,18 @@ class SRCtrlnetPipeline(nn.Module):
         self,
         ctrlnet=None,
         target_timestep=150.0,
-        ckpt_dir="./weights/stable-diffusion-3-medium-diffusers",
+        ckpt_dir="./weights/stable-diffusion-3.5-medium",
         gradient_checkpointing=True,
         num_ctrl_layers=6,
         num_extra_conditioning_channels=0,
         vae_path=None,
         use_fp16=False,
+        prompt_cache_path=None,
     ):
         super().__init__()
+        saved_prompt_tokens = load_prompt_cache(
+            prompt_cache_path or Path(ckpt_dir) / "saved_prompt_tokens_null_nocfg.pt"
+        )
         self.execution_device = torch.device("cuda")
         # 找到最接近150的时间步
         self.target_timestep = target_timestep
@@ -121,7 +120,6 @@ class SRCtrlnetPipeline(nn.Module):
         )
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
 
-        saved_prompt_tokens = torch.load(f"{ckpt_dir}/saved_prompt_tokens_null_nocfg.pt", map_location="cpu")
         self.prompt_embeds = saved_prompt_tokens["prompt_embeds"].float()
         self.pooled_prompt_embeds = saved_prompt_tokens["pooled_prompt_embeds"].float()
         if use_fp16:
@@ -308,4 +306,3 @@ class SRCtrlnetPipeline(nn.Module):
         state_dict = torch.load(state_dict_path, map_location="cpu")
         ret = self.controlnet.load_state_dict(state_dict["controlnet"])
         print("controlnet", ret)
-        

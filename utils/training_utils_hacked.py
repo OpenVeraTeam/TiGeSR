@@ -491,6 +491,8 @@ def parse_args_paired_training(input_args=None):
     parser = argparse.ArgumentParser()
     # args for continue training
     parser.add_argument("--ckpt_path", default=None)
+    parser.add_argument("--sd3_dir", default="weights/stable-diffusion-3.5-medium")
+    parser.add_argument("--prompt_cache_path", default=None)
 
     # args for the loss function
     parser.add_argument("--gan_disc_type", default="vagan_clip")

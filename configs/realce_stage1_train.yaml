@@ -1,0 +1,65 @@
+model:
+  target: models.DiffTSR.DiffTSR_base.UNet2OutPipeline_wEncoder
+
+  params:
+    max_length: 30
+    num_classes: 6736
+    transformer_dim: 768
+
+    IDM_Unet_config:
+      target: models.DiffTSR.rope.UNet2OutwRoPE
+      params:
+        image_size: [32, 128]
+        in_channels: 9
+        out_channels: 3
+        model_channels: 320
+        attention_resolutions:
+        - 8
+        - 4
+        - 2
+        num_res_blocks: 2
+        channel_mult:
+        - 1
+        - 2
+        - 3
+        num_heads: 8
+        resblock_updown: true
+        use_spatial_transformer: true
+        transformer_depth: 1
+        context_dim: 160
+        use_checkpoint: true
+        legacy: False
+
+
+    transformer_encoder_config:
+      target: models.DiffTSR.IDM.modules.encoders.modules.BERTEmbedder
+      params:
+        n_embed: 160
+        n_layer: 4
+        vocab_size: 6736
+        max_seq_len: 30
+        use_tokenizer: False
+
+    VAE_model_config:
+      target: models.DiffTSR.IDM.models.autoencoder.AutoencoderKL
+      params:
+        embed_dim: 3
+        ddconfig:
+          double_z: true
+          z_channels: 3
+          resolution: 512
+          in_channels: 3
+          out_ch: 3
+          ch: 128
+          ch_mult:
+          - 1
+          - 2
+          - 4
+          num_res_blocks: 2
+          attn_resolutions: []
+          dropout: 0.0
+
+    Text_Prediction_config:
+      target: models.DiffTSR.TDM.models.text_prediction.My_Text_Prediction
+      params:
+        max_length: 30

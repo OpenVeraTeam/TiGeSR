@@ -1,9 +1,7 @@
-import zhconv
 import torch
 from torch import nn
 import torch.nn.functional as F
 
-from models.DiffTSR.TDM.models.transocr import Transformer
 from models.DiffTSR.TDM.utils.util import tensor2str, get_alphabet
 from models.DiffTSR.IDM.utils.alphabets import alphabet as IDM_alphabet
 
@@ -22,6 +20,7 @@ class Text_Prediction(nn.Module):
         self.ckpt = ckpt_path
 
         self.alphabet = get_alphabet(self.alphabet_path)
+        from models.DiffTSR.TDM.models.transocr import Transformer
         self.trans_ocr_model = Transformer(len(self.alphabet)).cuda()
 
         weight_dict = torch.load(self.ckpt)
@@ -38,6 +37,8 @@ class Text_Prediction(nn.Module):
         self.max_length = 24
 
     def predict(self, input_image):
+        import zhconv
+
         max_length = self.max_length
         input_image = torch.nn.functional.interpolate(input_image, size=(self.imgH, self.imgW))
         batch = input_image.size()[0]
@@ -109,9 +110,19 @@ class My_Text_Prediction(nn.Module):
         self.ckpt = ckpt_path
 
         self.alphabet = get_alphabet(self.alphabet_path)
-        self.trans_ocr_model = Transformer(len(self.alphabet))
+        # The released TIGER pipeline uses PP-OCR text and only needs this
+        # module's tokenizer. TransOCR is loaded only for legacy predict().
+        self.trans_ocr_model = None
+        self.IDM_alphabet = IDM_alphabet
+        self.max_length = max_length
 
-        weight_dict = torch.load(self.ckpt)
+    def _load_recognizer(self, device):
+        if self.trans_ocr_model is not None:
+            return
+        from models.DiffTSR.TDM.models.transocr import Transformer
+
+        self.trans_ocr_model = Transformer(len(self.alphabet))
+        weight_dict = torch.load(self.ckpt, map_location="cpu")
         weight_dict = {key.replace("module.module.", "module."): value for key, value in weight_dict.items()}
 
         if 'state_dict' in weight_dict:
@@ -121,15 +132,18 @@ class My_Text_Prediction(nn.Module):
             self.trans_ocr_model.load_state_dict(weight_dict)
 
         self.trans_ocr_model.eval()
-        self.IDM_alphabet = IDM_alphabet
-        self.max_length = max_length
+        self.trans_ocr_model.to(device)
         
     def to_device(self,device=None):
         if device is not None:
             self.device = device
-        self.trans_ocr_model.to(self.device)
+        if self.trans_ocr_model is not None:
+            self.trans_ocr_model.to(self.device)
 
     def predict(self, input_image):
+        import zhconv
+
+        self._load_recognizer(input_image.device)
         max_length = self.max_length
         input_image = torch.nn.functional.interpolate(input_image, size=(self.imgH, self.imgW))
         batch = input_image.size()[0]

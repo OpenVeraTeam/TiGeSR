@@ -1,0 +1,8 @@
+# Install in tiger-ocr, separately from the PyTorch environments.
+# CPU Paddle avoids installing a second CUDA/NCCL dependency stack.
+paddlepaddle==3.1.1
+paddleocr==3.2.0
+paddlex[ocr-core]==3.2.0
+numpy==1.26.4
+PyYAML==6.0.2
+huggingface-hub==0.34.4

@@ -416,6 +416,13 @@ class UNet2OutwRoPE(UnetwRoPE):
         self.output_blocks.eval().requires_grad_(False)
         self.out.eval().requires_grad_(False)
         self.out_mask.train()
+
+    def set_unet_train(self):
+        self.input_blocks.train()
+        self.middle_block.train()
+        self.output_blocks.train()
+        self.out.eval().requires_grad_(False)
+        self.out_mask.eval().requires_grad_(False)
         
     def forward(self, x, timesteps=None, context=None, y=None, **kwargs):
         """

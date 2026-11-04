@@ -13,6 +13,10 @@ data/*
 !data/*.py
 !data/degradation/
 !data/degradation/**
+# Keep these after the data exceptions so compiled artifacts stay excluded.
+**/__pycache__/
+*.py[cod]
 *.log
+work/
 wandb/
 runs/

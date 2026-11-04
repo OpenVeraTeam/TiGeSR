@@ -2,6 +2,7 @@ import gc
 import json
 import math
 import os
+import re
 import sys
 
 import torch.nn.functional
@@ -61,7 +62,8 @@ def main(args):
         os.makedirs(os.path.join(args.output_dir, "logs"), exist_ok=True)
 
     net_pix2pix = SRCtrlnetPipeline(target_timestep=args.timestep,
-                                    ckpt_dir='./weights/stable-diffusion-3.5-medium', 
+                                    ckpt_dir=args.sd3_dir,
+                                    prompt_cache_path=args.prompt_cache_path,
                                     gradient_checkpointing=args.gradient_checkpointing, 
                                     num_ctrl_layers=args.ctrl_layers)
     trained_steps = 0
@@ -69,11 +71,14 @@ def main(args):
     # Whether to continue training or not?
     if args.ckpt_path is not None:
         net_pix2pix.load_model(args.ckpt_path)
-        if "Epoch" in args.ckpt_path:
-            trained_Epochs = int(args.ckpt_path.split("_")[-1].split(".")[0]) + 1
+        checkpoint_name = os.path.basename(args.ckpt_path)
+        epoch_match = re.search(r"Epoch_(\d+)", checkpoint_name)
+        step_match = re.search(r"model[_-](\d+)", checkpoint_name)
+        if epoch_match:
+            trained_Epochs = int(epoch_match.group(1)) + 1
             print_in_main_process(accelerator, f"=========== Continue training from {trained_Epochs} epoch ===========")
         else:
-            trained_steps = int(args.ckpt_path.split("_")[-1].split(".")[0])
+            trained_steps = int(step_match.group(1)) if step_match else 0
             trained_Epochs = 0
             print_in_main_process(accelerator, f"=========== Continue training from {trained_steps} step ===========")
 

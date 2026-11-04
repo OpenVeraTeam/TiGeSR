@@ -7,9 +7,6 @@ import argparse
 import json
 from pathlib import Path
 
-import pyiqa
-import torch
-from paddleocr import PaddleOCR
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
@@ -28,8 +25,13 @@ def main():
     parser.add_argument("--pred-dir", type=Path, required=True)
     parser.add_argument("--gt-dir", type=Path, required=True)
     parser.add_argument("--labels-json", type=Path, help="Optional filename-to-text JSON for OCR-A.")
-    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--ocr-annotations", type=Path, help="Cached OCR on predicted images; avoids importing Paddle.")
+    parser.add_argument("--device", default=None)
     args = parser.parse_args()
+    import pyiqa
+    import torch
+    if args.device is None:
+        args.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     predictions, targets = image_index(args.pred_dir), image_index(args.gt_dir)
     shared = sorted(predictions.keys() & targets.keys())
@@ -47,13 +49,20 @@ def main():
 
     if args.labels_json:
         labels = json.loads(args.labels_json.read_text(encoding="utf-8"))
-        ocr = PaddleOCR(use_doc_orientation_classify=True, use_doc_unwarping=False, use_textline_orientation=True, device=args.device)
+        ocr = None
+        if args.ocr_annotations is None:
+            from paddleocr import PaddleOCR
+            ocr = PaddleOCR(ocr_version="PP-OCRv5", use_doc_orientation_classify=True, use_doc_unwarping=False, use_textline_orientation=True, device="cpu")
         correct = evaluated = 0
         for stem in shared:
             target = labels.get(predictions[stem].name, labels.get(stem))
             if target is None:
                 continue
-            record = ocr.predict(str(predictions[stem]))[0]
+            if args.ocr_annotations is not None:
+                cache = args.ocr_annotations / f"{stem}_res.json"
+                record = json.loads(cache.read_text(encoding="utf-8"))
+            else:
+                record = ocr.predict(str(predictions[stem]))[0]
             prediction = "".join(record.get("rec_texts", []))
             correct += normalized(prediction) == normalized(target)
             evaluated += 1

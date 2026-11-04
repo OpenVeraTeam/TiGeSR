@@ -8,8 +8,8 @@ alp2num_character = None
 def get_alphabet(alpha_path):
     global alp2num_character, alphabet_character
     if alp2num_character == None:
-        alphabet_character_file = open(alpha_path)
-        alphabet_character = list(alphabet_character_file.read().strip())
+        with open(alpha_path, encoding="utf-8") as alphabet_character_file:
+            alphabet_character = list(alphabet_character_file.read().strip())
         alphabet_character_raw = ['START', '\xad']
         for item in alphabet_character:
             alphabet_character_raw.append(item)

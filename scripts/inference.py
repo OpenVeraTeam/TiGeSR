@@ -1,117 +1,116 @@
+"""Multi-GPU TIGER inference, optionally using a Paddle-free annotation cache."""
+import argparse
 import gc
 import json
-import os
-
-import torch
-import torch.utils.checkpoint
-import torch.utils.data
-from tqdm.auto import tqdm
+from pathlib import Path
 import sys
 
-__dir__ = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(__dir__)
-sys.path.append(os.path.abspath(os.path.join(__dir__, "..")))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils.annotations import inference_size, resize_annotation
 
-from models.FullPipeline import TextSR_multiscale
-from utils.training_utils_hacked import parse_args_test
-from torchvision.utils import save_image
-from PIL import Image
-import torchvision.transforms.functional as tF
-import torch.nn.functional as F
 
-import torch.multiprocessing as mp
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--test_folder", type=Path, required=True)
+    parser.add_argument("--output_dir", type=Path, required=True)
+    parser.add_argument("--difftsr_config", default="configs/stage1.yaml")
+    parser.add_argument("--idm_ckpt_path", required=True)
+    parser.add_argument("--enc_path", required=True)
+    parser.add_argument("--ctrlnet_ckpt_path", required=True)
+    parser.add_argument("--difftsr_ckpt_path", default="weights/DiffTSR/DiffTSR_new.ckpt")
+    parser.add_argument("--scheduler_path", default="weights/DiffTSR/PNDMscheduler")
+    parser.add_argument("--hi_sam_ckpt", default="weights/BTS-test-test_best.pth")
+    parser.add_argument("--sd3_dir", default="weights/stable-diffusion-3.5-medium")
+    parser.add_argument("--prompt_cache_path", default=None)
+    parser.add_argument("--anno_path", type=Path)
+    parser.add_argument("--ocr_device", default="cpu")
+    parser.add_argument("--max_side", type=int, default=1024)
+    parser.add_argument("--timestep", type=float, default=150)
+    parser.add_argument("--ctrl_layers", type=int, default=6)
+    parser.add_argument("--enable_tiling", action="store_true")
+    parser.add_argument("--gradient_checkpointing", action="store_true")
+    parser.add_argument("--seed", type=int, default=42)
+    return parser.parse_args()
 
-# 每个进程的处理函数
+
 def process_images(rank, world_size, args, img_names):
-    # 设置设备
+    import torch
+    import torchvision.transforms.functional as tF
+    from torchvision.utils import save_image
+    from PIL import Image
+    from models.FullPipeline import TextSR_multiscale
+
     torch.cuda.set_device(rank)
-    
-    # 初始化模型
+    torch.manual_seed(args.seed + rank)
     net_sr = TextSR_multiscale(
         args.difftsr_config,
         target_timestep=args.timestep,
-        ckpt_dir="./weights/stable-diffusion-3.5-medium",
+        ckpt_dir=args.sd3_dir,
         gradient_checkpointing=args.gradient_checkpointing,
         num_ctrl_layers=args.ctrl_layers,
+        difftsr_ckpt_path=args.difftsr_ckpt_path,
+        scheduler_path=args.scheduler_path,
+        hi_sam_ckpt=args.hi_sam_ckpt,
+        prompt_cache_path=args.prompt_cache_path,
     )
+    net_sr.ocr_device = args.ocr_device
     net_sr.load_model(args.idm_ckpt_path, args.ctrlnet_ckpt_path, args.enc_path)
     net_sr.set_eval()
-    net_sr.to_device(rank)
-    
-    # 为当前进程分配图像
-    local_img_names = img_names[rank::world_size]
-    
-    for img_name in local_img_names:
-        output_path = os.path.join(args.output_dir, img_name.split('.')[0] + ".png")
-        if os.path.exists(output_path):
-            print(f"文件 {output_path} 已存在，跳过处理")
+    net_sr.to_device(torch.device(f"cuda:{rank}"))
+
+    for img_name in img_names[rank::world_size]:
+        stem = Path(img_name).stem
+        output_path = args.output_dir / f"{stem}.png"
+        if output_path.exists():
             continue
-        # if img_name!="IMG_20250724_173355_1_14mm.png":
-        #     print(f"文件 {output_path} 已存在，跳过处理")
-        #     continue
-            
-        lq_path = os.path.join(args.test_folder, img_name)
-        input_img = Image.open(lq_path).convert("RGB")
-        W, H = input_img.size
-        ratio = 1024/max(W,H)
-        # ratio = 1
-        input_img = input_img.resize((round(W * ratio) // 8 * 8, round(H * ratio) // 8 * 8))
-        # input_img = input_img.resize((W // 8 * 8, H // 8 * 8))  # 确保尺寸是8的倍数
-        input_img = tF.to_tensor(input_img).unsqueeze(0).to(f"cuda:{rank}")
-        
+        with Image.open(args.test_folder / img_name) as source:
+            image = source.convert("RGB")
+            original_size = image.size
+            target_size = inference_size(*original_size, args.max_side)
+            image = image.resize(target_size)
+        input_img = tF.to_tensor(image).unsqueeze(0).to(f"cuda:{rank}")
+        anno = None
+        if args.anno_path is not None:
+            anno_file = args.anno_path / f"{stem}_res.json"
+            anno = json.loads(anno_file.read_text(encoding="utf-8"))
+            anno = resize_annotation(anno, original_size, target_size)
         with torch.no_grad():
-            print(f"GPU {rank} 处理: {img_name}")
-            if args.anno_path is not None:
-                anno_file = os.path.join(args.anno_path, img_name.split('.')[0] + '_res.json')
-                with open(anno_file, 'r') as f:
-                    anno = json.load(f)
-                sr_img, mask, sub_sr = net_sr.inference_wanno(input_img, anno,tiling=args.enable_tiling)
-            else:
-                sr_img, mask, sub_sr = net_sr.inference(input_img,anno=None,tiling=args.enable_tiling)
-                
-            # 保存结果
-            os.makedirs(args.output_dir, exist_ok=True)
-            # save_image(input_img.cpu(), os.path.join(args.output_dir, img_name.split('.')[0] + "_lr.png"))
-            save_image(sr_img.cpu(), os.path.join(args.output_dir, img_name.split('.')[0] + ".png"))
-            save_image(mask.cpu(), os.path.join(args.output_dir, img_name.split('.')[0] + "_mask.png"))
-            save_image(sub_sr.cpu(), os.path.join(args.output_dir, img_name.split('.')[0] + "_subsr.png"))
-            
-        # 清理内存
+            sr_img, mask, sub_sr = net_sr.inference(input_img, anno=anno, tiling=args.enable_tiling)
+        save_image(sr_img.cpu(), output_path)
+        save_image(mask.cpu(), args.output_dir / f"{stem}_mask.png")
+        save_image(sub_sr.cpu(), args.output_dir / f"{stem}_subsr.png")
         gc.collect()
         torch.cuda.empty_cache()
 
-# 主函数
+
 def main(args):
-    # 获取可用GPU数量
+    required = [Path(path) for path in (args.idm_ckpt_path, args.enc_path,
+                args.ctrlnet_ckpt_path, args.difftsr_ckpt_path, args.hi_sam_ckpt,
+                args.difftsr_config)]
+    required += [Path(args.scheduler_path) / "scheduler_config.json",
+                 Path(args.prompt_cache_path) if args.prompt_cache_path else
+                 Path(args.sd3_dir) / "saved_prompt_tokens_null_nocfg.pt"]
+    required += [Path(args.sd3_dir) / sub / name for sub, name in
+                 (("transformer", "config.json"), ("vae", "config.json"),
+                  ("scheduler", "scheduler_config.json"))]
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing:
+        raise FileNotFoundError("Missing model assets:\n  " + "\n  ".join(missing) +
+                                "\nSee docs/weights.md and scripts/check_setup.py.")
+    import torch
+    import torch.multiprocessing as mp
+
     num_gpus = torch.cuda.device_count()
-    # num_gpus = 2
     if num_gpus < 1:
-        raise RuntimeError("没有可用的GPU")
-    
-    print(f"使用 {num_gpus} 个GPU进行并行推理")
-    
-    # 获取所有图像名称
-    img_names = [f for f in os.listdir(args.test_folder) 
-                if f.endswith(('.jpg', '.png', '.JPG'))]
-    img_names.sort()
-    
-    # 创建输出目录
-    os.makedirs(args.output_dir, exist_ok=True)
-    
-    # 启动多进程
-    mp.spawn(
-        process_images,
-        args=(num_gpus, args, img_names),
-        nprocs=num_gpus,
-        join=True
-    )
+        raise RuntimeError("TIGER inference requires an NVIDIA CUDA GPU.")
+    image_names = sorted(p.name for p in args.test_folder.iterdir()
+                         if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".webp"})
+    if not image_names:
+        raise ValueError(f"No input images found in {args.test_folder}")
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    world_size = min(num_gpus, len(image_names))
+    mp.spawn(process_images, args=(world_size, args, image_names), nprocs=world_size, join=True)
+
 
 if __name__ == "__main__":
-    # 设置多进程启动方法
-    mp.set_start_method('spawn', force=True)
-    
-    args = parse_args_test()
-    # 添加分布式参数
-    args.distributed = False  # 这里我们使用多进程而非DDP
-    
-    main(args)
+    main(parse_args())

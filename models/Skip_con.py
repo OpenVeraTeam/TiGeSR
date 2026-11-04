@@ -70,6 +70,7 @@ class SRCtrlnetSkipConnectionPipeline(SRCtrlnetPipeline):
         vae_path=None,
         use_fp16=False,
         lora_rank_vae=4,
+        prompt_cache_path=None,
     ):
         super().__init__(ctrlnet,
             target_timestep,
@@ -79,6 +80,7 @@ class SRCtrlnetSkipConnectionPipeline(SRCtrlnetPipeline):
             num_extra_conditioning_channels,
             vae_path,
             use_fp16,
+            prompt_cache_path=prompt_cache_path,
         )
         self.lora_rank_vae = lora_rank_vae
         self.vae.encoder.forward = my_vae_encoder_fwd.__get__(self.vae.encoder, self.vae.encoder.__class__)

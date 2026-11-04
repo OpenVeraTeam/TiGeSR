@@ -5,7 +5,7 @@ set -euo pipefail
 accelerate launch --gpu_ids 2,3 --main_process_port 29501 scripts/train_stage1.py \
   --is_shape_same \
   --lambda_l2 1 --lambda_focal 0.5 \
-  --config_yaml configs/stage1.yaml \
+  --config_yaml configs/stage1_train.yaml \
   --output_dir outputs/stage1_unpruned \
   --train_folders /path/to/train_a,/path/to/train_b,/path/to/train_c,/path/to/train_d,/path/to/train_e \
   --test_folder /path/to/val \
