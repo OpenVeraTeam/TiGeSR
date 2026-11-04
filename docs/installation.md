@@ -25,6 +25,8 @@ Download and prepare **all** [model assets](weights.md), including the inherited
 
 ## 2. PP-OCRv5 annotation environment
 
+**H20 / Hopper deployment note.** The author reports Paddle GPU runtime failures on the H20 used for TiGeSR. For this setup, use the CPU OCR environment below, save PP-OCRv5 annotations, and run TiGeSR on the H20 with `--anno_path`. This keeps OCR independent of the model's GPU runtime. Treat this as an observed environment limitation: the [official Paddle compatibility table](https://www.paddlepaddle.org.cn/documentation/docs/en/install/Tables_en.html) lists Hopper support with suitable CUDA builds, so this is not a claim that every Paddle release fails on every Hopper GPU. GPU OCR on H20 has not been validated by this repository.
+
 Use a second environment:
 
 ```bash

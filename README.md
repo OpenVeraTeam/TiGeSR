@@ -42,6 +42,8 @@ The first stage reconstructs legible glyph structures from a low-quality scene i
 
 Use Python 3.11 and separate the PyTorch model environment from the PaddleOCR environment. This avoids installing competing CUDA/NCCL packages into one environment.
 
+**H20 users:** the author encountered Paddle GPU runtime failures on H20. Use the separate **CPU PP-OCRv5 environment**, then supply its annotations via `--anno_path` for GPU inference. See the [H20 / Hopper deployment note](docs/installation.md#2-pp-ocrv5-annotation-environment).
+
 ```bash
 git clone git@github.com:OpenVeraTeam/TiGeSR.git
 cd TiGeSR
